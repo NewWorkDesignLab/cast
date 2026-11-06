@@ -1,0 +1,28 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { hashPassword, parseDevices, sha256Hex, verifyDevice, verifyPassword } from '../src/lib/auth.ts';
+
+test('password hash round trip', async () => {
+  const hash = await hashPassword('correct horse');
+  assert.match(hash, /^scrypt:[0-9a-f]{32}:[0-9a-f]{128}$/);
+  assert.equal(await verifyPassword('correct horse', hash), true);
+  assert.equal(await verifyPassword('wrong', hash), false);
+});
+
+test('a malformed password hash throws instead of letting anyone in', async () => {
+  await assert.rejects(verifyPassword('x', ''));
+  await assert.rejects(verifyPassword('x', 'scrypt$abc$def'));
+});
+
+test('device check', () => {
+  const devices = parseDevices(JSON.stringify([{ deviceId: 'quest01', secretSha256: sha256Hex('s3cret') }]));
+  assert.equal(verifyDevice(devices, 'quest01', 's3cret'), true);
+  assert.equal(verifyDevice(devices, 'quest01', 'wrong'), false);
+  assert.equal(verifyDevice(devices, 'unknown', 's3cret'), false);
+});
+
+test('invalid DEVICES config throws', () => {
+  assert.throws(() => parseDevices('{}'));
+  assert.throws(() => parseDevices('[{"deviceId":"quest01"}]'));
+  assert.throws(() => parseDevices(JSON.stringify([{ deviceId: 'bad id', secretSha256: sha256Hex('x') }])));
+});

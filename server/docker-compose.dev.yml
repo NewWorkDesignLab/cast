@@ -1,0 +1,10 @@
+# Local LiveKit server for development: API key "devkey", secret "secret".
+# For a Quest on the LAN, start with NODE_IP=<PC LAN IP>, otherwise media only reaches this PC.
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.11
+    command: --dev --bind 0.0.0.0 --node-ip ${NODE_IP:-127.0.0.1}
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
