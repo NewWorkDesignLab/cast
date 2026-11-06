@@ -26,9 +26,12 @@ $serial = (Adb get-serialno).Trim()
 $model = (Adb shell getprop ro.product.model).Trim()
 if (-not (& $adbPath shell pm path $package)) { throw "Install NWDL Cast on the headset first." }
 
-# Register with the website
-$secure = Read-Host "Password of $Server" -AsSecureString
-$password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+# Register with the website (the password can also come from $env:CAST_PASSWORD, e.g. for setting up many headsets)
+$password = $env:CAST_PASSWORD
+if (-not $password) {
+    $secure = Read-Host "Password of $Server" -AsSecureString
+    $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+}
 try {
     $session = Invoke-RestMethod -Method Post -Uri "$Server/api/token/viewer" -ContentType "application/json" -Body (@{ password = $password } | ConvertTo-Json)
     $device = Invoke-RestMethod -Method Post -Uri "$Server/api/devices" -ContentType "application/json" `

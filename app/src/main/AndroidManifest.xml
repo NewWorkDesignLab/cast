@@ -3,11 +3,14 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Passthrough camera, only to read the pairing QR code -->
-    <uses-permission android:name="horizonos.permission.HEADSET_CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Standby again after a reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Lets the app start from the background (boot); granted by the setup script -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:label="NWDL Cast"
@@ -29,10 +32,18 @@
             </intent-filter>
         </activity>
 
-        <!-- Keeps microphone and app audio capture alive while another app is in front -->
+        <!-- Keeps the screen capture and the microphone alive while another app is in front -->
         <service
             android:name=".CastService"
             android:exported="false"
-            android:foregroundServiceType="microphone" />
+            android:foregroundServiceType="mediaProjection|microphone" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

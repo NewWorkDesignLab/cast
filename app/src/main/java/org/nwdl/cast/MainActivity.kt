@@ -13,132 +13,106 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import org.nwdl.cast.CastSession.State
 
 class MainActivity : ComponentActivity() {
 
-    private companion object {
-        const val PAIRING_TEXT = "This headset is not paired yet.\n\n" +
-            "On a computer, open cast.nwdl.org/headsets, sign in and choose “Add a headset”. " +
-            "Then look at the QR code with this headset."
+    companion object {
+        /** Set by [BootReceiver]: enter standby and get out of the way. */
+        const val EXTRA_AUTOSTART = "autostart"
+
+        private const val NOT_SET_UP = "This headset is not set up for NWDL Cast yet.\n\n" +
+            "Connect it to a PC and run the setup script (app/setup.ps1, see cast.nwdl.org)."
     }
 
     private lateinit var status: TextView
-    private lateinit var start: Button
-    private lateinit var stop: Button
-    private lateinit var scanner: QrScanner
-
-    private var pairingMessage: String? = null
-    private var pairing = false
-    private var rejectedCode: String? = null
-    private var askedForCamera = false
+    private lateinit var primary: Button
+    private lateinit var quit: Button
+    private var askedForCapture = false
 
     // Must be registered before onCreate
     private val consent = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val data = result.data
-        if (result.resultCode == Activity.RESULT_OK && data != null) CastSession.start(this, data)
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            CastSession.enterStandby(this, data)
+            if (intent.getBooleanExtra(EXTRA_AUTOSTART, false)) moveTaskToBack(true)
+        } else {
+            status.text = "Screen capture was not allowed."
+        }
     }
 
-    private val microphonePermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+    private val microphone = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         if (granted[Manifest.permission.RECORD_AUDIO] == true) askForScreenCapture()
         else status.text = "Microphone permission is needed for casting."
-    }
-
-    private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        pairingMessage = if (granted) null else "Camera permission is needed to read the pairing code."
-        render()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         status = findViewById(R.id.status)
-        start = findViewById(R.id.start)
-        stop = findViewById(R.id.stop)
-        scanner = QrScanner(this, ::onQrCode)
+        primary = findViewById(R.id.start)
+        quit = findViewById(R.id.stop)
+        quit.text = "Quit"
 
-        start.setOnClickListener {
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) askForScreenCapture()
-            else microphonePermission.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS))
+        primary.setOnClickListener {
+            when (CastSession.status.value.state) {
+                State.Off -> {
+                    askedForCapture = false
+                    enterStandby()
+                }
+                State.Standby -> CastSession.startCasting()
+                State.Casting -> CastSession.stopCasting()
+                State.Starting -> Unit
+            }
         }
-        stop.setOnClickListener { CastSession.stop(this) }
-        addDebugTools(this, findViewById(R.id.root), status)
+        quit.setOnClickListener {
+            CastSession.quit(this)
+            finish()
+        }
 
-        lifecycleScope.launch { CastSession.state.collect { render() } }
+        lifecycleScope.launch { CastSession.status.collect { render() } }
+        enterStandby() // opening the app means: be ready
     }
 
     override fun onResume() {
         super.onResume()
-        askedForCamera = false
-        render()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        scanner.stop()
+        render() // the setup script may have just written the credentials
     }
 
     private fun render() {
         val config = DeviceConfig.load(this)
-        val state = CastSession.state.value
-        val paired = config != null
-        start.visibility = if (paired) View.VISIBLE else View.GONE
-        stop.visibility = if (paired) View.VISIBLE else View.GONE
-
+        primary.visibility = if (config != null) View.VISIBLE else View.GONE
+        quit.visibility = if (config != null) View.VISIBLE else View.GONE
         if (config == null) {
-            val notice = pairingMessage ?: (state as? CastSession.State.Failed)?.reason
-            status.text = listOfNotNull(notice, if (pairing) "Pairing…" else PAIRING_TEXT).joinToString("\n\n")
-            if (!pairing) startScanning()
+            status.text = NOT_SET_UP
             return
         }
-
-        scanner.stop()
-        status.text = when (state) {
-            CastSession.State.Idle -> "Ready to cast as ${config.name}."
-            CastSession.State.Starting -> "Starting…"
-            CastSession.State.Casting -> "Casting. You can switch to another app now."
-            is CastSession.State.Ended -> state.reason
-            is CastSession.State.Failed -> "Casting failed: ${state.reason}"
+        val (state, message) = CastSession.status.value
+        val text = when (state) {
+            State.Off -> "Not running."
+            State.Standby -> "Ready as ${config.name}.\nShow the start code to this headset, or press Start casting."
+            State.Starting -> "Starting…"
+            State.Casting -> "Casting as ${config.name}.\nYou can switch to another app now."
         }
-        start.isEnabled = state != CastSession.State.Starting && state != CastSession.State.Casting
-        stop.isEnabled = state == CastSession.State.Casting
-    }
-
-    // The camera only opens while the app has focus, i.e. the headset is worn and the panel is in front
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) render() else scanner.stop()
-    }
-
-    private fun startScanning() {
-        if (!hasWindowFocus()) return
-        if (checkSelfPermission(QrScanner.PERMISSION) == PackageManager.PERMISSION_GRANTED) {
-            scanner.start()
-        } else if (!askedForCamera) {
-            askedForCamera = true
-            cameraPermission.launch(QrScanner.PERMISSION)
+        status.text = listOfNotNull(message, text).joinToString("\n\n")
+        primary.text = when (state) {
+            State.Off -> "Start standby"
+            State.Standby -> "Start casting"
+            State.Starting -> "Starting…"
+            State.Casting -> "Stop casting"
         }
+        primary.isEnabled = state != State.Starting
     }
 
-    private fun onQrCode(text: String) {
-        if (pairing || text == rejectedCode || DeviceConfig.load(this) != null) return
-        pairing = true
-        render()
-        lifecycleScope.launch {
-            pairingMessage = try {
-                withContext(Dispatchers.IO) { DeviceConfig.pair(this@MainActivity, text) }
-                null
-            } catch (e: Exception) {
-                rejectedCode = text // keep scanning, but do not retry the same code
-                "Pairing failed: ${e.message ?: e.javaClass.simpleName}"
-            }
-            pairing = false
-            render()
-        }
+    private fun enterStandby() {
+        if (DeviceConfig.load(this) == null || CastSession.status.value.state != State.Off || askedForCapture) return
+        askedForCapture = true
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) askForScreenCapture()
+        else microphone.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS))
     }
 
+    // With the setup script's PROJECT_MEDIA app op the system answers this without showing a dialog
     private fun askForScreenCapture() {
         val manager = getSystemService(MediaProjectionManager::class.java)
         // Always the whole view: the consent dialog then offers no choice of a single app

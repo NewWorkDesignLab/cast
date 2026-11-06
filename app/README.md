@@ -1,17 +1,30 @@
 # NWDL Cast (headset app)
 
-Android app for Meta Quest 3 / 3S. It casts what the wearer sees, with microphone and app sound, to `https://cast.nwdl.org`. The wearer starts and stops casting in the app; viewers can end a cast on the website. Other apps need no integration.
+Android app for Meta Quest 3 / 3S. It casts what the wearer sees, with microphone and app sound, to `https://cast.nwdl.org`. Other apps need no integration.
 
-## Pairing
+## How it works
 
-A new headset shows a pairing notice instead of the casting buttons and looks for a QR code with the passthrough camera.
+- **Standby:** opening the app starts a local screen capture (nothing is sent) and looks for QR codes in it, also while another app is in front. After a reboot the app returns to standby by itself.
+- **Casting:** holding the start code from `cast.nwdl.org/codes` in front of the headset, or pressing "Start casting", publishes the capture to the website. The stop code, "Stop casting" or "End cast" on the website go back to standby.
+- **Quit** stops everything, also after reboots, until the app is opened again.
 
-1. On a computer, open `cast.nwdl.org/headsets`, sign in and choose "Add a headset".
-2. Look at the QR code with the headset. It works once and expires after 10 minutes.
+## Setup (once per headset)
 
-The headset then has permanent credentials, stored privately in the app. Removing it on `/headsets` revokes them; the app asks to pair again. Release builds only pair with `https://cast.nwdl.org`.
+The headset needs developer mode and a USB connection to a Windows PC with adb. Install NWDL Cast (store, or `adb install` for development), then:
 
-Android asks for consent before each cast (MediaProjection). On headsets in developer mode this can be skipped once per headset: `adb shell appops set org.nwdl.cast PROJECT_MEDIA allow`.
+```powershell
+.\setup.ps1                                 # https://cast.nwdl.org
+.\setup.ps1 -Server http://localhost:4321   # local dev stack
+```
+
+The script asks for the website password (or reads `$env:CAST_PASSWORD`) and:
+
+- registers the headset with the website, named after its model and a random code, e.g. "Quest 3 - K7M2QX". The serial number identifies it, so running the script again keeps the name and replaces the credentials.
+- copies the credentials to the headset; the app moves them into its private storage
+- grants microphone and notification permission
+- allows screen capture without the share dialog (`PROJECT_MEDIA`) and starting from the background after a reboot (`SYSTEM_ALERT_WINDOW`)
+
+Release builds only use `https://cast.nwdl.org`. Without the setup, the app shows a notice instead of the casting buttons.
 
 ## Build
 
@@ -29,13 +42,4 @@ adb install -r build/outputs/apk/debug/cast-debug.apk
 
 ## Local testing over USB
 
-Start the local stack (`server/livekit-dev.ps1`, `npm run dev` in `web/`), then forward the website and LiveKit signalling to the headset. Media goes directly over the network, so the headset must be in the same network as the PC.
-
-```sh
-adb reverse tcp:4321 tcp:4321   # website / API
-adb reverse tcp:7880 tcp:7880   # LiveKit signalling
-```
-
-Pair with the QR code from `http://localhost:4321/headsets` (debug builds accept any server and plain http/ws). The forwarding is lost when the headset reconnects; run the commands again.
-
-Debug builds also have a button that tries to skip the consent dialog through the headset's own adb daemon (needs `adb tcpip 5555` once; the headset asks to allow the app's adb key).
+Start the local stack (`server/livekit-dev.ps1`, `npm run dev` in `web/`) and run `.\setup.ps1 -Server http://localhost:4321`. It forwards the website and LiveKit signalling to the headset with `adb reverse`; media goes directly over the network, so the headset must be in the same network as the PC. The forwarding is lost when the headset reconnects; run the script again or `adb reverse tcp:4321 tcp:4321` and `adb reverse tcp:7880 tcp:7880`.

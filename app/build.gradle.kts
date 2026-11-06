@@ -26,7 +26,7 @@ android {
     }
 
     buildFeatures {
-        buildConfig = true // BuildConfig.DEBUG: release builds only pair with cast.nwdl.org
+        buildConfig = true // BuildConfig.DEBUG: release builds only use cast.nwdl.org
     }
 
     compileOptions {
@@ -42,6 +42,5 @@ kotlin {
 dependencies {
     implementation("io.livekit:livekit-android:2.30.0")
     implementation("androidx.activity:activity-ktx:1.10.1")
-    implementation("com.google.zxing:core:3.5.3") // QR codes
-    debugImplementation("dev.mobile:dadb:1.2.10") // local adb test, see src/debug
+    implementation("com.google.zxing:core:3.5.3") // start and stop codes
 }

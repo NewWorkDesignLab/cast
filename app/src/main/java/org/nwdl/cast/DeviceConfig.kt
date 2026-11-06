@@ -2,28 +2,46 @@ package org.nwdl.cast
 
 import android.content.Context
 import org.json.JSONObject
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** Thrown when the server no longer knows this headset (removed on the website). */
-class NotPairedException : Exception("This headset was removed on the website. Pair it again.")
+/** Thrown when the server no longer accepts this headset's credentials. */
+class NotSetUpException : Exception("The credentials of this headset are no longer valid. Run the setup script again.")
 
-/** Permanent credentials of this headset, received by pairing with a QR code from the website. */
+/** Credentials of this headset, written by the setup script (app/setup.ps1). */
 data class DeviceConfig(val server: String, val deviceId: String, val deviceSecret: String, val name: String) {
 
     /** Asks the cast website for a LiveKit token. Blocking, call off the main thread. */
     fun fetchToken(): Pair<String, String> {
-        val json = post("$server/api/token/device", JSONObject().put("deviceId", deviceId).put("deviceSecret", deviceSecret)) { code ->
-            if (code == 401) throw NotPairedException()
+        val connection = URL("$server/api/token/device").openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 10_000
+            connection.setRequestProperty("Content-Type", "application/json")
+            val body = JSONObject().put("deviceId", deviceId).put("deviceSecret", deviceSecret).toString()
+            connection.outputStream.use { it.write(body.toByteArray()) }
+            when (val status = connection.responseCode) {
+                200 -> Unit
+                401 -> throw NotSetUpException()
+                else -> throw IllegalStateException("Token request failed (HTTP $status)")
+            }
+            val json = JSONObject(connection.inputStream.bufferedReader().readText())
+            return json.getString("url") to json.getString("token")
+        } finally {
+            connection.disconnect()
         }
-        return json.getString("url") to json.getString("token")
     }
 
     companion object {
-        const val PRODUCTION_SERVER = "https://cast.nwdl.org"
-        private const val PREFS = "pairing"
+        private const val PREFS = "device"
+        private const val PRODUCTION_SERVER = "https://cast.nwdl.org"
 
+        /** The stored credentials; takes over a cast.json pushed by the setup script first. */
         fun load(context: Context): DeviceConfig? {
+            importPushedFile(context)
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             return DeviceConfig(
                 prefs.getString("server", null) ?: return null,
@@ -35,51 +53,24 @@ data class DeviceConfig(val server: String, val deviceId: String, val deviceSecr
 
         fun clear(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
 
-        /**
-         * Reads the QR code of the website ({"server": …, "code": …}) and exchanges the one-time code for credentials.
-         * Blocking, call off the main thread. Release builds only pair with [PRODUCTION_SERVER].
-         */
-        fun pair(context: Context, qrText: String): DeviceConfig {
-            val qr = runCatching { JSONObject(qrText) }.getOrNull() ?: throw IllegalArgumentException("This is not a cast pairing code.")
-            val server = qr.optString("server").trimEnd('/')
-            val code = qr.optString("code")
-            require(code.isNotEmpty() && (server.startsWith("https://") || server.startsWith("http://"))) { "This is not a cast pairing code." }
-            require(BuildConfig.DEBUG || server == PRODUCTION_SERVER) { "This code is not from cast.nwdl.org." }
-
-            // The server names the headset "<model> - <random code>", e.g. "Quest 3 - K7M2QX"
-            val request = JSONObject().put("code", code).put("model", android.os.Build.MODEL)
-            val json = post("$server/api/devices/pair", request) { status ->
-                if (status == 410) throw IllegalStateException("The code was already used or has expired. Show a new one.")
-            }
-            val config = DeviceConfig(server, json.getString("deviceId"), json.getString("deviceSecret"), json.getString("name"))
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putString("server", config.server)
-                .putString("deviceId", config.deviceId)
-                .putString("deviceSecret", config.deviceSecret)
-                .putString("name", config.name)
-                .apply()
-            return config
-        }
-
-        /** POSTs JSON and returns the JSON answer; [onError] may throw a specific exception for a status code. */
-        private fun post(url: String, body: JSONObject, onError: (Int) -> Unit): JSONObject {
-            val connection = URL(url).openConnection() as HttpURLConnection
-            try {
-                connection.requestMethod = "POST"
-                connection.doOutput = true
-                connection.connectTimeout = 10_000
-                connection.readTimeout = 10_000
-                connection.setRequestProperty("Content-Type", "application/json")
-                connection.outputStream.use { it.write(body.toString().toByteArray()) }
-                val status = connection.responseCode
-                if (status != 200) {
-                    onError(status)
-                    throw IllegalStateException("Server answered HTTP $status")
+        // The setup script can only write to the app's external files folder; the secret should not stay there.
+        private fun importPushedFile(context: Context) {
+            val file = File(context.getExternalFilesDir(null), "cast.json")
+            if (!file.exists()) return
+            runCatching {
+                val json = JSONObject(file.readText())
+                val server = json.getString("server").trimEnd('/')
+                // Release builds only talk to cast.nwdl.org, whatever the file says
+                if (BuildConfig.DEBUG || server == PRODUCTION_SERVER) {
+                    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                        .putString("server", server)
+                        .putString("deviceId", json.getString("deviceId"))
+                        .putString("deviceSecret", json.getString("deviceSecret"))
+                        .putString("name", json.getString("name"))
+                        .commit()
                 }
-                return JSONObject(connection.inputStream.bufferedReader().readText())
-            } finally {
-                connection.disconnect()
             }
+            file.delete()
         }
     }
 }
