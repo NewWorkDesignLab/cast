@@ -35,6 +35,10 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
       const statusText = byId('status');
       const canvas = byId<HTMLCanvasElement>('canvas');
 
+      // Without an explicit encoding LiveKit picks a preset capped at 20-30 fps.
+      const FPS = 60;
+      const VIDEO_ENCODING = { maxBitrate: 2_500_000, maxFramerate: FPS };
+
       let room: Room | null = null;
       let stopMedia = () => {};
 
@@ -52,7 +56,7 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
           ctx.fillText(`${now.toLocaleTimeString('en-GB')}.${String(now.getMilliseconds()).padStart(3, '0')}`, 320, 230);
           ctx.font = '32px monospace';
           ctx.fillText(`#${frame}`, 320, 290);
-        }, 1000 / 30);
+        }, 1000 / FPS);
 
         const audio = new AudioContext();
         const tone = (frequency: number) => {
@@ -75,7 +79,7 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
         }, 250);
 
         return {
-          video: canvas.captureStream(30).getVideoTracks()[0],
+          video: canvas.captureStream(FPS).getVideoTracks()[0],
           mic: mic.track,
           app: app.track,
           stop: () => {
@@ -113,7 +117,12 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
           const media = startMedia();
           stopMedia = media.stop;
           const local = room.localParticipant;
-          await local.publishTrack(media.video, { name: 'passthrough', source: Track.Source.Camera, simulcast: false });
+          await local.publishTrack(media.video, {
+            name: 'passthrough',
+            source: Track.Source.Camera,
+            simulcast: false,
+            videoEncoding: VIDEO_ENCODING,
+          });
           await local.publishTrack(media.mic, { name: 'mic', source: Track.Source.Microphone });
           await local.publishTrack(media.app, { name: 'app', source: Track.Source.ScreenShareAudio });
           stopButton.disabled = false;
