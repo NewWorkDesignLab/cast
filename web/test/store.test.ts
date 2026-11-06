@@ -9,16 +9,16 @@ const newStore = async () => fileStore(join(await mkdtemp(join(tmpdir(), 'cast-s
 
 test('a pairing code works exactly once', async () => {
   const store = await newStore();
-  await store.putPairing('code1', 'Quest 1', 600);
-  assert.equal(await store.takePairing('code1'), 'Quest 1');
-  assert.equal(await store.takePairing('code1'), null);
-  assert.equal(await store.takePairing('unknown'), null);
+  await store.putPairing('code1', 600);
+  assert.equal(await store.takePairing('code1'), true);
+  assert.equal(await store.takePairing('code1'), false);
+  assert.equal(await store.takePairing('unknown'), false);
 });
 
 test('an expired pairing code is rejected', async () => {
   const store = await newStore();
-  await store.putPairing('old', 'Quest 1', -1);
-  assert.equal(await store.takePairing('old'), null);
+  await store.putPairing('old', -1);
+  assert.equal(await store.takePairing('old'), false);
 });
 
 test('devices can be added, listed and removed', async () => {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hashPassword, isRememberToken, parseDevices, rememberToken, sha256Hex, verifyDevice, verifyPassword } from '../src/lib/auth.ts';
+import { DEVICE_ID, deviceCode, deviceName, hashPassword, isRememberToken, parseDevices, rememberToken, sha256Hex, verifyDevice, verifyPassword } from '../src/lib/auth.ts';
 
 test('password hash round trip', async () => {
   const hash = await hashPassword('correct horse');
@@ -37,4 +37,14 @@ test('stay-signed-in token: valid until expiry or password change, not forgeable
   const [payload] = token.split('.');
   assert.equal(isRememberToken('secret', hash, `${payload}.forged`), false);
   assert.equal(isRememberToken('secret', hash, ''), false);
+});
+
+test('headset names: model plus a readable random code', () => {
+  const code = deviceCode();
+  assert.match(code, /^[A-HJKMNP-Z2-9]{6}$/);
+  assert.equal(DEVICE_ID.test(code), true);
+  assert.equal(deviceName('Quest 3', 'K7M2QX'), 'Quest 3 - K7M2QX');
+  assert.equal(deviceName('Quest 3S<script>', 'K7M2QX'), 'Quest 3Sscript - K7M2QX');
+  assert.equal(deviceName(undefined, 'K7M2QX'), 'Quest - K7M2QX');
+  assert.equal(deviceName('x'.repeat(100), 'K7M2QX').length, 24 + ' - K7M2QX'.length);
 });

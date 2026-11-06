@@ -20,8 +20,7 @@ import '../styles/cast.css';
         <section class="panel" aria-labelledby="add-title">
           <h2 id="add-title">Add a headset</h2>
           <form id="add-device">
-            <label class="visually-hidden" for="device-name">Name of the headset</label>
-            <input id="device-name" required maxlength="40" placeholder="Name, e.g. Quest 1" />
+            <p class="muted">The headset gets a name with a random code, e.g. “Quest 3 - K7M2QX”.</p>
             <button type="submit">Show pairing code</button>
           </form>
           <div id="pairing" hidden>
@@ -48,7 +47,6 @@ import '../styles/cast.css';
       const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
       const content = byId('content');
       const addForm = byId<HTMLFormElement>('add-device');
-      const nameInput = byId<HTMLInputElement>('device-name');
       const pairing = byId('pairing');
       const qr = byId('qr');
       const pairingMessage = byId('pairing-message');
@@ -118,7 +116,7 @@ import '../styles/cast.css';
         const button = addForm.querySelector('button')!;
         button.disabled = true;
         pairingMessage.textContent = '';
-        const res = await viewerFetch(session, '/api/devices/pairing', { name: nameInput.value }).catch(() => null);
+        const res = await viewerFetch(session, '/api/devices/pairing', {}).catch(() => null);
         button.disabled = false;
         if (!res?.ok) {
           pairingMessage.textContent = res?.status === 401 ? 'Your sign-in has expired. Reload the page.' : 'Could not create a pairing code.';
@@ -128,7 +126,6 @@ import '../styles/cast.css';
         qr.innerHTML = renderSVG(payload, { border: 2 });
         pairingExpiry = Date.now() + expiresIn * 1000;
         pairing.hidden = false;
-        nameInput.value = '';
       };
 
       setupSignIn(
@@ -147,15 +144,5 @@ import '../styles/cast.css';
       );
     </script>
 
-    <style>
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-        white-space: nowrap;
-      }
-    </style>
   </body>
 </html>

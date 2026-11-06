@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
 const scryptAsync = promisify(scrypt) as (password: string, salt: Buffer, keylen: number) => Promise<Buffer>;
@@ -7,6 +7,20 @@ const KEYLEN = 64;
 export const DEVICE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export type Device = { deviceId: string; secretSha256: string };
+
+// No 0/O, 1/I/L, so that the code can be read off and typed without mix-ups
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+/** Random 6-character code of a paired headset, e.g. "K7M2QX"; also its device ID. */
+export function deviceCode(): string {
+  return Array.from({ length: 6 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
+}
+
+/** "<model> - <code>", e.g. "Quest 3 - K7M2QX"; the model comes from the headset and is cleaned up. */
+export function deviceName(model: unknown, code: string): string {
+  const clean = typeof model === 'string' ? model.replace(/[^\w .-]/g, '').trim().slice(0, 24) : '';
+  return `${clean || 'Quest'} - ${code}`;
+}
 
 // Format scrypt:<saltHex>:<hashHex>. ':' instead of '$', because .env loaders expand '$'.
 export async function hashPassword(password: string): Promise<string> {

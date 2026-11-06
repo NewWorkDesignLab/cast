@@ -46,7 +46,9 @@ data class DeviceConfig(val server: String, val deviceId: String, val deviceSecr
             require(code.isNotEmpty() && (server.startsWith("https://") || server.startsWith("http://"))) { "This is not a cast pairing code." }
             require(BuildConfig.DEBUG || server == PRODUCTION_SERVER) { "This code is not from cast.nwdl.org." }
 
-            val json = post("$server/api/devices/pair", JSONObject().put("code", code)) { status ->
+            // The server names the headset "<model> - <random code>", e.g. "Quest 3 - K7M2QX"
+            val request = JSONObject().put("code", code).put("model", android.os.Build.MODEL)
+            val json = post("$server/api/devices/pair", request) { status ->
                 if (status == 410) throw IllegalStateException("The code was already used or has expired. Show a new one.")
             }
             val config = DeviceConfig(server, json.getString("deviceId"), json.getString("deviceSecret"), json.getString("name"))

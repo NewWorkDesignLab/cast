@@ -9,9 +9,9 @@ export interface Store {
   getDevice(deviceId: string): Promise<StoredDevice | null>;
   putDevice(device: StoredDevice): Promise<void>;
   deleteDevice(deviceId: string): Promise<void>;
-  putPairing(code: string, name: string, ttlSeconds: number): Promise<void>;
-  /** Returns the device name and deletes the code; null if the code is unknown, used or expired. */
-  takePairing(code: string): Promise<string | null>;
+  putPairing(code: string, ttlSeconds: number): Promise<void>;
+  /** Deletes the code; false if it is unknown, used or expired. */
+  takePairing(code: string): Promise<boolean>;
 }
 
 /** Upstash Redis over its REST API (Vercel Marketplace), no client library needed. */
@@ -41,18 +41,18 @@ export function redisStore(url: string, token: string): Store {
     async deleteDevice(deviceId) {
       await call('HDEL', 'devices', deviceId);
     },
-    async putPairing(code, name, ttlSeconds) {
-      await call('SET', `pairing:${code}`, name, 'EX', ttlSeconds);
+    async putPairing(code, ttlSeconds) {
+      await call('SET', `pairing:${code}`, '1', 'EX', ttlSeconds);
     },
     async takePairing(code) {
-      return (await call('GETDEL', `pairing:${code}`)) ?? null;
+      return (await call('GETDEL', `pairing:${code}`)) !== null;
     },
   };
 }
 
 /** A JSON file, for local development only: Vercel has no writable file system. */
 export function fileStore(path: string): Store {
-  type Data = { devices: Record<string, StoredDevice>; pairings: Record<string, { name: string; expires: number }> };
+  type Data = { devices: Record<string, StoredDevice>; pairings: Record<string, number> }; // code -> expiry
   const load = async (): Promise<Data> => {
     try {
       return JSON.parse(await readFile(path, 'utf8'));
@@ -81,18 +81,18 @@ export function fileStore(path: string): Store {
       delete data.devices[deviceId];
       await save(data);
     },
-    async putPairing(code, name, ttlSeconds) {
+    async putPairing(code, ttlSeconds) {
       const data = await load();
-      data.pairings[code] = { name, expires: Date.now() + ttlSeconds * 1000 };
+      data.pairings[code] = Date.now() + ttlSeconds * 1000;
       await save(data);
     },
     async takePairing(code) {
       const data = await load();
-      const pairing = data.pairings[code];
-      if (!pairing) return null;
+      const expires = data.pairings[code];
+      if (!expires) return false;
       delete data.pairings[code];
       await save(data);
-      return pairing.expires > Date.now() ? pairing.name : null;
+      return expires > Date.now();
     },
   };
 }
