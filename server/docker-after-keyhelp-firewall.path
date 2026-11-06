@@ -1,0 +1,11 @@
+# Saving the KeyHelp firewall rewrites the iptables filter table and drops Docker's chains,
+# so containers lose outbound network. KeyHelp saves its rules to this file after applying them.
+# Install: copy both units to /etc/systemd/system, then systemctl enable --now docker-after-keyhelp-firewall.path
+[Unit]
+Description=Watch the KeyHelp firewall rules
+
+[Path]
+PathChanged=/etc/keyhelp/iptables/startup_rules_ipv4
+
+[Install]
+WantedBy=multi-user.target

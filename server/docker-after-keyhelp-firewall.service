@@ -1,0 +1,9 @@
+# Started by docker-after-keyhelp-firewall.path: restarting Docker recreates its iptables rules.
+[Unit]
+Description=Restart Docker after a KeyHelp firewall change
+
+[Service]
+Type=oneshot
+# Lets KeyHelp finish applying the rules first
+ExecStartPre=/bin/sleep 15
+ExecStart=/usr/bin/systemctl restart docker.service
