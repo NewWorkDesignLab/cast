@@ -34,7 +34,7 @@ Each headset needs its own device ID and secret, never built into the app.
 
 ## Local testing over USB
 
-Start the local stack (`server/livekit-dev.ps1`, `npm run dev` in `web/`), then forward its ports to the headset:
+Start the local stack (`server/livekit-dev.ps1`, `npm run dev` in `web/`), then forward the website and LiveKit signalling to the headset. Media goes directly over the network, so the headset must be in the same network as the PC.
 
 ```sh
 adb reverse tcp:4321 tcp:4321   # website / token API
