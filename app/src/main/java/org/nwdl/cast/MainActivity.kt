@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
             else permissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS))
         }
         stop.setOnClickListener { CastSession.stop(this) }
+        addDebugTools(this, findViewById(R.id.root), status)
 
         lifecycleScope.launch {
             CastSession.state.collect { state ->

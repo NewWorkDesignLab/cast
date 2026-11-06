@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hashPassword, parseDevices, sha256Hex, verifyDevice, verifyPassword } from '../src/lib/auth.ts';
+import { hashPassword, isRememberToken, parseDevices, rememberToken, sha256Hex, verifyDevice, verifyPassword } from '../src/lib/auth.ts';
 
 test('password hash round trip', async () => {
   const hash = await hashPassword('correct horse');
@@ -25,4 +25,16 @@ test('invalid DEVICES config throws', () => {
   assert.throws(() => parseDevices('{}'));
   assert.throws(() => parseDevices('[{"deviceId":"quest01"}]'));
   assert.throws(() => parseDevices(JSON.stringify([{ deviceId: 'bad id', secretSha256: sha256Hex('x') }])));
+});
+
+test('stay-signed-in token: valid until expiry or password change, not forgeable', async () => {
+  const hash = await hashPassword('dev');
+  const token = rememberToken('secret', hash, 30);
+  assert.equal(isRememberToken('secret', hash, token), true);
+  assert.equal(isRememberToken('other-secret', hash, token), false);
+  assert.equal(isRememberToken('secret', await hashPassword('new password'), token), false);
+  assert.equal(isRememberToken('secret', hash, token, Date.now() + 31 * 86_400_000), false);
+  const [payload] = token.split('.');
+  assert.equal(isRememberToken('secret', hash, `${payload}.forged`), false);
+  assert.equal(isRememberToken('secret', hash, ''), false);
 });

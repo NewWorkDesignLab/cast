@@ -1,0 +1,116 @@
+// The viewer's sign-in in the browser, shared by the cast page and /headsets.
+// The token lives in sessionStorage (this tab); "stay signed in" is an httpOnly cookie set by the server.
+export type Session = { url: string; token: string };
+
+const KEY = 'cast.session';
+
+function remember(session: Session): Session {
+  try {
+    sessionStorage.setItem(KEY, JSON.stringify(session));
+  } catch {}
+  return session;
+}
+
+function forget() {
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch {}
+}
+
+// LiveKit join tokens expire after 1 h; a minute of margin for the connect.
+function isFresh(session: Session): boolean {
+  try {
+    const { exp } = JSON.parse(atob(session.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return exp * 1000 > Date.now() + 60_000;
+  } catch {
+    return false;
+  }
+}
+
+async function requestToken(body: object): Promise<Response> {
+  return fetch('/api/token/viewer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => {
+    throw new Error('The server is not reachable. Check your connection.');
+  });
+}
+
+/** Exchanges the password for a viewer token. Throws a readable error. */
+export async function signIn(password: string, staySignedIn: boolean): Promise<Session> {
+  const res = await requestToken({ password, remember: staySignedIn });
+  if (res.status === 401) throw new Error('Wrong password.');
+  if (!res.ok) throw new Error('Sign-in failed. Please try again.');
+  return remember(await res.json());
+}
+
+/** The sign-in of this tab, or a new one from the "stay signed in" cookie; null if the viewer has to sign in. */
+export async function resumeSession(): Promise<Session | null> {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(KEY) ?? 'null');
+    if (stored?.token && isFresh(stored)) return stored;
+  } catch {}
+  forget();
+  const res = await requestToken({}).catch(() => null);
+  return res?.ok ? remember(await res.json()) : null;
+}
+
+export async function signOut() {
+  forget();
+  await fetch('/api/token/logout', { method: 'POST' }).catch(() => {});
+}
+
+/**
+ * Wires the sign-in form (components/SignIn.astro) and the sign-out button (components/Header.astro).
+ * [onSession] gets a valid session and shows the page; it may throw to show an error on the form.
+ */
+export function setupSignIn(onSession: (session: Session) => Promise<void>, onSignOut: () => void) {
+  const form = document.getElementById('login') as HTMLFormElement;
+  const password = document.getElementById('password') as HTMLInputElement;
+  const staySignedIn = document.getElementById('stay-signed-in') as HTMLInputElement;
+  const error = document.getElementById('login-error')!;
+  const button = form.querySelector('button')!;
+  const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+  const showSignIn = (text = '') => {
+    form.hidden = false;
+    error.textContent = text;
+  };
+  const start = async (session: Session) => {
+    await onSession(session);
+    form.hidden = true;
+  };
+
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    button.disabled = true;
+    error.textContent = '';
+    try {
+      await start(await signIn(password.value, staySignedIn.checked));
+      password.value = '';
+    } catch (err) {
+      error.textContent = message(err);
+    } finally {
+      button.disabled = false;
+    }
+  };
+
+  document.getElementById('sign-out')!.onclick = async () => {
+    await signOut();
+    onSignOut();
+    showSignIn();
+  };
+
+  resumeSession().then((session) => (session ? start(session).catch((err) => showSignIn(message(err))) : showSignIn()));
+  return { showSignIn };
+}
+
+/** fetch with the viewer token, for the API routes that need a signed-in viewer. */
+export function viewerFetch(session: Session, path: string, body?: object) {
+  return fetch(path, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+    body: body && JSON.stringify(body),
+  });
+}

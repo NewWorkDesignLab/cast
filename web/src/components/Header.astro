@@ -1,0 +1,19 @@
+---
+interface Props {
+  current: 'live' | 'headsets';
+}
+const { current } = Astro.props;
+---
+
+<header>
+  <h1>cast</h1>
+  <nav>
+    <a href="/" aria-current={current === 'live' ? 'page' : undefined}>Live</a>
+    <a href="/headsets" aria-current={current === 'headsets' ? 'page' : undefined}>Headsets</a>
+  </nav>
+  <span id="status" role="status"></span>
+  <span class="header-actions">
+    <slot />
+    <button id="sign-out" type="button">Sign out</button>
+  </span>
+</header>

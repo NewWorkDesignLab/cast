@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
 const scryptAsync = promisify(scrypt) as (password: string, salt: Buffer, keylen: number) => Promise<Buffer>;
@@ -42,4 +42,27 @@ export function verifyDevice(devices: Device[], deviceId: string, deviceSecret: 
   const device = devices.find((d) => d.deviceId === deviceId);
   if (!device) return false;
   return timingSafeEqual(Buffer.from(sha256Hex(deviceSecret), 'hex'), Buffer.from(device.secretSha256, 'hex'));
+}
+
+const hmac = (secret: string, data: string) => createHmac('sha256', secret).update(data).digest('base64url');
+const passwordTag = (passwordHash: string) => sha256Hex(passwordHash).slice(0, 16);
+
+/** "Stay signed in" cookie value: signed, valid for [days] or until the viewer password changes. */
+export function rememberToken(secret: string, passwordHash: string, days = 30, now = Date.now()): string {
+  const payload = Buffer.from(JSON.stringify({ exp: now + days * 86_400_000, pw: passwordTag(passwordHash) })).toString('base64url');
+  return `${payload}.${hmac(secret, payload)}`;
+}
+
+export function isRememberToken(secret: string, passwordHash: string, value: string, now = Date.now()): boolean {
+  const [payload, signature] = value.split('.');
+  if (!payload || !signature) return false;
+  const expected = Buffer.from(hmac(secret, payload));
+  const actual = Buffer.from(signature);
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return false;
+  try {
+    const { exp, pw } = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    return exp > now && pw === passwordTag(passwordHash);
+  } catch {
+    return false;
+  }
 }

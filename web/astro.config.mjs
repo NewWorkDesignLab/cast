@@ -1,7 +1,7 @@
 import { defineConfig, envField } from 'astro/config';
 import vercel from '@astrojs/vercel';
 
-const secret = () => envField.string({ context: 'server', access: 'secret' });
+const secret = (optional = false) => envField.string({ context: 'server', access: 'secret', optional });
 
 export default defineConfig({
   adapter: vercel(),
@@ -13,7 +13,11 @@ export default defineConfig({
       LIVEKIT_API_SECRET: secret(),
       LIVEKIT_PUBLIC_URL: secret(),
       VIEWER_PASSWORD_HASH: secret(),
-      DEVICES: secret(),
+      // Static devices, e.g. the test publisher's; headsets are paired by QR code and live in the store
+      DEVICES: secret(true),
+      // Upstash Redis (Vercel Marketplace) for paired headsets; without it a local file is used in development
+      KV_REST_API_URL: secret(true),
+      KV_REST_API_TOKEN: secret(true),
     },
   },
 });

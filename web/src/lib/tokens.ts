@@ -7,8 +7,8 @@ const TTL = '1h';
 
 export type Keys = { apiKey: string; apiSecret: string };
 
-export function deviceToken(keys: Keys, deviceId: string): Promise<string> {
-  const token = new AccessToken(keys.apiKey, keys.apiSecret, { identity: `device-${deviceId}`, ttl: TTL });
+export function deviceToken(keys: Keys, deviceId: string, name = deviceId): Promise<string> {
+  const token = new AccessToken(keys.apiKey, keys.apiSecret, { identity: `device-${deviceId}`, name, ttl: TTL });
   token.addGrant({
     room: ROOM,
     roomJoin: true,
@@ -31,9 +31,22 @@ export async function isViewerToken(keys: Keys, jwt: string): Promise<boolean> {
   }
 }
 
+const roomService = (keys: Keys, livekitUrl: string) =>
+  new RoomServiceClient(livekitUrl.replace(/^ws/, 'http'), keys.apiKey, keys.apiSecret);
+
+/** IDs of the devices that are casting right now. */
+export async function castingDevices(keys: Keys, livekitUrl: string): Promise<Set<string>> {
+  try {
+    const participants = await roomService(keys, livekitUrl).listParticipants(ROOM);
+    return new Set(participants.map((p) => p.identity).filter((id) => id.startsWith('device-')).map((id) => id.slice(7)));
+  } catch {
+    return new Set(); // no room yet: nobody is casting
+  }
+}
+
 /** Ends a device's cast by removing it from the room. False if the device is not in the room. */
 export async function removeDevice(keys: Keys, livekitUrl: string, deviceId: string): Promise<boolean> {
-  const api = new RoomServiceClient(livekitUrl.replace(/^ws/, 'http'), keys.apiKey, keys.apiSecret);
+  const api = roomService(keys, livekitUrl);
   try {
     await api.removeParticipant(ROOM, `device-${deviceId}`);
     return true;

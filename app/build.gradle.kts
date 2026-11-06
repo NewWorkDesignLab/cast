@@ -38,4 +38,5 @@ kotlin {
 dependencies {
     implementation("io.livekit:livekit-android:2.30.0")
     implementation("androidx.activity:activity-ktx:1.10.1")
+    debugImplementation("dev.mobile:dadb:1.2.10") // local adb test, see src/debug
 }
