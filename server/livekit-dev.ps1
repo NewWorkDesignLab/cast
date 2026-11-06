@@ -1,6 +1,6 @@
 # Starts a local LiveKit server in dev mode (API key "devkey", secret "secret") on ws://localhost:7880.
 # Downloads the Windows build on first run.
-# It announces 127.0.0.1 for media, so a headset reaches it through adb reverse (see app/README.md), no firewall rule needed.
+# Media goes to the PC's LAN IP, so allow it through the Windows firewall; a headset in the same network reaches it directly.
 $version = "1.13.11"
 $exe = Join-Path $PSScriptRoot "bin\livekit-server.exe"
 if (-not (Test-Path $exe)) {
@@ -9,4 +9,4 @@ if (-not (Test-Path $exe)) {
     Expand-Archive $zip (Join-Path $PSScriptRoot "bin") -Force
     Remove-Item $zip
 }
-& $exe --dev --bind 0.0.0.0 --node-ip 127.0.0.1
+& $exe --dev --bind 0.0.0.0

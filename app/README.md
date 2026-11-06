@@ -39,7 +39,6 @@ Start the local stack (`server/livekit-dev.ps1`, `npm run dev` in `web/`), then 
 ```sh
 adb reverse tcp:4321 tcp:4321   # website / token API
 adb reverse tcp:7880 tcp:7880   # LiveKit signalling
-adb reverse tcp:7881 tcp:7881   # LiveKit media over TCP
 ```
 
-and use `"tokenEndpoint": "http://localhost:4321/api/token/device"` in `cast.json`. Debug builds allow plain http/ws for this.
+and use `"tokenEndpoint": "http://localhost:4321/api/token/device"` in `cast.json`. Debug builds allow plain http/ws for this. The forwarding is lost when the headset reconnects; run the commands again.
