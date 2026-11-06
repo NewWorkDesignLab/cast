@@ -2,50 +2,82 @@ package org.nwdl.cast
 
 import android.content.Context
 import org.json.JSONObject
-import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** Device ID and secret of this headset, provisioned as cast.json in the app's files folder (adb push), never built into the app. */
-data class DeviceConfig(val deviceId: String, val deviceSecret: String, val tokenEndpoint: String) {
+/** Thrown when the server no longer knows this headset (removed on the website). */
+class NotPairedException : Exception("This headset was removed on the website. Pair it again.")
+
+/** Permanent credentials of this headset, received by pairing with a QR code from the website. */
+data class DeviceConfig(val server: String, val deviceId: String, val deviceSecret: String, val name: String) {
 
     /** Asks the cast website for a LiveKit token. Blocking, call off the main thread. */
     fun fetchToken(): Pair<String, String> {
-        val connection = URL(tokenEndpoint).openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = "POST"
-            connection.doOutput = true
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 10_000
-            connection.setRequestProperty("Content-Type", "application/json")
-            val body = JSONObject().put("deviceId", deviceId).put("deviceSecret", deviceSecret).toString()
-            connection.outputStream.use { it.write(body.toByteArray()) }
-            when (val code = connection.responseCode) {
-                200 -> Unit
-                401 -> throw IllegalStateException("Device ID or secret rejected (401)")
-                else -> throw IllegalStateException("Token request failed (HTTP $code)")
-            }
-            val json = JSONObject(connection.inputStream.bufferedReader().readText())
-            return json.getString("url") to json.getString("token")
-        } finally {
-            connection.disconnect()
+        val json = post("$server/api/token/device", JSONObject().put("deviceId", deviceId).put("deviceSecret", deviceSecret)) { code ->
+            if (code == 401) throw NotPairedException()
         }
+        return json.getString("url") to json.getString("token")
     }
 
     companion object {
-        private const val DEFAULT_ENDPOINT = "https://cast.nwdl.org/api/token/device"
+        const val PRODUCTION_SERVER = "https://cast.nwdl.org"
+        private const val PREFS = "pairing"
 
-        fun file(context: Context) = File(context.getExternalFilesDir(null), "cast.json")
+        fun load(context: Context): DeviceConfig? {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            return DeviceConfig(
+                prefs.getString("server", null) ?: return null,
+                prefs.getString("deviceId", null) ?: return null,
+                prefs.getString("deviceSecret", null) ?: return null,
+                prefs.getString("name", null) ?: return null,
+            )
+        }
 
-        /** Fails with a readable reason if the file is missing or incomplete. */
-        fun load(context: Context): Result<DeviceConfig> = runCatching {
-            val file = file(context)
-            check(file.exists()) { "No cast.json found. Copy it to ${file.absolutePath} (adb push)." }
-            val json = JSONObject(file.readText())
-            val id = json.optString("deviceId")
-            val secret = json.optString("deviceSecret")
-            check(id.isNotEmpty() && secret.isNotEmpty()) { "cast.json needs deviceId and deviceSecret." }
-            DeviceConfig(id, secret, json.optString("tokenEndpoint").ifEmpty { DEFAULT_ENDPOINT })
+        fun clear(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+
+        /**
+         * Reads the QR code of the website ({"server": …, "code": …}) and exchanges the one-time code for credentials.
+         * Blocking, call off the main thread. Release builds only pair with [PRODUCTION_SERVER].
+         */
+        fun pair(context: Context, qrText: String): DeviceConfig {
+            val qr = runCatching { JSONObject(qrText) }.getOrNull() ?: throw IllegalArgumentException("This is not a cast pairing code.")
+            val server = qr.optString("server").trimEnd('/')
+            val code = qr.optString("code")
+            require(code.isNotEmpty() && (server.startsWith("https://") || server.startsWith("http://"))) { "This is not a cast pairing code." }
+            require(BuildConfig.DEBUG || server == PRODUCTION_SERVER) { "This code is not from cast.nwdl.org." }
+
+            val json = post("$server/api/devices/pair", JSONObject().put("code", code)) { status ->
+                if (status == 410) throw IllegalStateException("The code was already used or has expired. Show a new one.")
+            }
+            val config = DeviceConfig(server, json.getString("deviceId"), json.getString("deviceSecret"), json.getString("name"))
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString("server", config.server)
+                .putString("deviceId", config.deviceId)
+                .putString("deviceSecret", config.deviceSecret)
+                .putString("name", config.name)
+                .apply()
+            return config
+        }
+
+        /** POSTs JSON and returns the JSON answer; [onError] may throw a specific exception for a status code. */
+        private fun post(url: String, body: JSONObject, onError: (Int) -> Unit): JSONObject {
+            val connection = URL(url).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.connectTimeout = 10_000
+                connection.readTimeout = 10_000
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use { it.write(body.toString().toByteArray()) }
+                val status = connection.responseCode
+                if (status != 200) {
+                    onError(status)
+                    throw IllegalStateException("Server answered HTTP $status")
+                }
+                return JSONObject(connection.inputStream.bufferedReader().readText())
+            } finally {
+                connection.disconnect()
+            }
         }
     }
 }

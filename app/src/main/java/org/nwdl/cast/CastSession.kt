@@ -73,7 +73,7 @@ object CastSession {
         val appContext = context.applicationContext
         scope.launch {
             try {
-                val config = DeviceConfig.load(appContext).getOrThrow()
+                val config = DeviceConfig.load(appContext) ?: throw IllegalStateException("This headset is not paired.")
                 val (url, token) = withContext(Dispatchers.IO) { config.fetchToken() }
                 CastService.start(appContext)
                 val room = LiveKit.create(appContext, roomOptions).also { room = it }
@@ -86,6 +86,7 @@ object CastSession {
                 _state.value = State.Casting
             } catch (e: Exception) {
                 release(appContext)
+                if (e is NotPairedException) DeviceConfig.clear(appContext) // back to pairing
                 _state.value = State.Failed(e.message ?: e.javaClass.simpleName)
             }
         }
