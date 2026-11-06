@@ -8,3 +8,4 @@ dist/
 livekit.yaml
 CLAUDE.md
 docs/
+.vscode/
