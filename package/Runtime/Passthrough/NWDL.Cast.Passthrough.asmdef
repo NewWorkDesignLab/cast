@@ -3,7 +3,8 @@
     "rootNamespace": "NWDL.Cast",
     "references": [
         "NWDL.Cast",
-        "meta.xr.mrutilitykit"
+        "meta.xr.mrutilitykit",
+        "Oculus.VR"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

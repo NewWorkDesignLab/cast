@@ -68,13 +68,13 @@ namespace NWDL.Cast
 
         private IFrameSource FindFrameSource()
         {
-#if UNITY_EDITOR
-            return gameObject.AddComponent<EditorTestFrameSource>();
-#else
             var found = GetComponentInChildren<IFrameSource>(true);
+#if UNITY_EDITOR
+            // Without a headset over Meta Horizon Link the Editor has no camera image.
+            if (found == null || !found.IsAvailable) return gameObject.AddComponent<EditorTestFrameSource>();
+#endif
             if (found == null) Debug.LogError("[Cast] usePassthrough is on, but the passthrough components are missing. Turn it off and on again in the Inspector.", this);
             return found;
-#endif
         }
 
 #if UNITY_EDITOR

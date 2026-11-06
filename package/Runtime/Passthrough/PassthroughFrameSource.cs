@@ -14,6 +14,8 @@ namespace NWDL.Cast
 
         private PassthroughCameraAccess cameraAccess;
 
+        public bool IsAvailable => cameraAccess.enabled;
+
         public Texture Texture => cameraAccess.enabled && cameraAccess.IsPlaying ? cameraAccess.GetTexture() : null;
 
         public Pose Pose => cameraAccess.GetCameraPose();
@@ -37,13 +39,17 @@ namespace NWDL.Cast
             }
         }
 
-        // The camera stays off in the Editor, where CastStreamer uses the test source.
+        // Off until Awake decides, so that the camera does not start where there is none.
         private void Reset() => GetComponent<PassthroughCameraAccess>().enabled = false;
 
         private void Awake()
         {
             cameraAccess = GetComponent<PassthroughCameraAccess>();
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if UNITY_EDITOR
+            // Real camera over Meta Horizon Link; without a headset CastStreamer uses the test source.
+            var headset = OVRPlugin.GetSystemHeadsetType();
+            cameraAccess.enabled = headset is OVRPlugin.SystemHeadset.Meta_Link_Quest_3 or OVRPlugin.SystemHeadset.Meta_Link_Quest_3S;
+#elif UNITY_ANDROID
             if (!Permission.HasUserAuthorizedPermission(CameraPermission)) Permission.RequestUserPermission(CameraPermission);
             cameraAccess.enabled = true; // waits until the permission is granted
 #endif

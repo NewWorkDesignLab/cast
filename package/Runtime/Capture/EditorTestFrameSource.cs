@@ -15,6 +15,8 @@ namespace NWDL.Cast
 
         private WebCamTexture webcam;
 
+        public bool IsAvailable => true;
+
         public Texture Texture { get; private set; }
 
         public Pose Pose
