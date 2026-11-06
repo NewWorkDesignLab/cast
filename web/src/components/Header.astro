@@ -10,6 +10,7 @@ const { current } = Astro.props;
   <nav>
     <a href="/" aria-current={current === 'live' ? 'page' : undefined}>Live</a>
     <a href="/headsets" aria-current={current === 'headsets' ? 'page' : undefined}>Headsets</a>
+    <a href="/codes">Codes</a>
   </nav>
   <span id="status" role="status"></span>
   <span class="header-actions">

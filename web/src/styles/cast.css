@@ -111,7 +111,7 @@ nav a[aria-current='page'] {
   gap: 0.75rem;
   margin-left: auto;
 }
-#enable-audio {
+.enable-audio {
   border-color: var(--accent);
 }
 
@@ -185,29 +185,31 @@ nav a[aria-current='page'] {
   border-radius: 8px;
   padding: 16px;
 }
-#add-device {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-#add-device input {
-  flex: 1 1 200px;
-  background: var(--bg);
-}
-#pairing {
-  display: grid;
-  justify-items: center;
-  gap: 0.75rem;
-  margin-top: 16px;
+/* Start and stop codes (/codes): as large as the screen allows, side by side or stacked */
+.codes-page {
+  padding: 16px;
   text-align: center;
 }
-#qr {
-  width: min(300px, 100%);
-  background: #fff;
-  border-radius: 8px;
-  line-height: 0;
+.big-codes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 32px;
 }
-#qr svg {
+.big-codes figure {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+.qr {
+  width: min(44vw, 75vh);
+  min-width: min(280px, 100%);
+  background: #fff;
+  border-radius: 12px;
+  line-height: 0;
+  margin-bottom: 0.75rem;
+}
+.qr svg {
   width: 100%;
   height: auto;
 }
@@ -233,7 +235,4 @@ nav a[aria-current='page'] {
 }
 .state.live {
   color: var(--live);
-}
-#device-list button {
-  margin-left: auto;
 }

@@ -1,0 +1,34 @@
+---
+import { renderSVG } from 'uqr';
+import '../styles/cast.css';
+
+// Held in front of a headset in standby, they start or stop its cast. Not secret, so no sign-in.
+const codes = [
+  { label: 'Start casting', svg: renderSVG('cast:start', { border: 2 }) },
+  { label: 'Stop casting', svg: renderSVG('cast:stop', { border: 2 }) },
+];
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>cast · Codes</title>
+  </head>
+  <body>
+    <main class="codes-page">
+      <p class="muted">Hold a code in front of a headset in standby. <a href="/">Back to cast</a></p>
+      <div class="big-codes">
+        {
+          codes.map((code) => (
+            <figure>
+              <div class="qr" set:html={code.svg} />
+              <figcaption>{code.label}</figcaption>
+            </figure>
+          ))
+        }
+      </div>
+    </main>
+  </body>
+</html>

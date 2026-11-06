@@ -15,9 +15,7 @@ import '../styles/cast.css';
     <SignIn />
 
     <main id="live" hidden>
-      <Header current="live">
-        <button id="enable-audio" type="button" hidden>Click to enable audio</button>
-      </Header>
+      <Header current="live" />
       <p id="empty">No headset is streaming right now.</p>
       <div id="tiles"></div>
     </main>
@@ -29,6 +27,7 @@ import '../styles/cast.css';
           <span class="name"></span>
           <span class="quality"></span>
           <span class="actions">
+            <button type="button" class="enable-audio" hidden>Enable audio</button>
             <button type="button" class="mute" aria-pressed="false">Mute</button>
             <button type="button" class="fullscreen">Fullscreen</button>
             <button type="button" class="focus" aria-pressed="false">Focus</button>
@@ -45,7 +44,6 @@ import '../styles/cast.css';
       const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
       const live = byId('live');
       const statusText = byId('status');
-      const enableAudio = byId<HTMLButtonElement>('enable-audio');
       const empty = byId('empty');
       const tilesEl = byId('tiles');
       const template = byId<HTMLTemplateElement>('tile-template');
@@ -57,6 +55,7 @@ import '../styles/cast.css';
         quality: HTMLElement;
         focus: HTMLButtonElement;
         mute: HTMLButtonElement;
+        enableAudio: HTMLButtonElement;
         fullscreen: HTMLButtonElement;
         end: HTMLButtonElement;
       };
@@ -94,6 +93,8 @@ import '../styles/cast.css';
           tile.focus.textContent = isFocus ? 'Show all' : 'Focus';
           tile.focus.setAttribute('aria-pressed', String(isFocus));
           tile.mute.hidden = !isFocus;
+          // Browsers block sound until the page was clicked, e.g. after a reload with a remembered sign-in
+          tile.enableAudio.hidden = !isFocus || muted || room.canPlaybackAudio;
           tile.fullscreen.hidden = !isFocus;
           tile.mute.textContent = muted ? 'Unmute' : 'Mute';
           tile.mute.setAttribute('aria-pressed', String(muted));
@@ -113,6 +114,7 @@ import '../styles/cast.css';
           quality: part('.quality'),
           focus: part('.focus'),
           mute: part('.mute'),
+          enableAudio: part('.enable-audio'),
           fullscreen: part('.fullscreen'),
           end: part('.end'),
         };
@@ -124,6 +126,7 @@ import '../styles/cast.css';
           manualFocus = focused() === identity ? null : identity;
           render();
         };
+        tile.enableAudio.onclick = () => room.startAudio();
         tile.mute.onclick = () => {
           muted = !muted;
           render();
@@ -173,7 +176,7 @@ import '../styles/cast.css';
           document.querySelectorAll(`audio[data-sid="${pub.trackSid}"]`).forEach((e) => e.remove());
         })
         .on(RoomEvent.ConnectionQualityChanged, (_quality, p) => showQuality(p as RemoteParticipant))
-        .on(RoomEvent.AudioPlaybackStatusChanged, () => (enableAudio.hidden = room.canPlaybackAudio))
+        .on(RoomEvent.AudioPlaybackStatusChanged, render)
         .on(RoomEvent.Reconnecting, () => (statusText.textContent = 'Reconnecting…'))
         .on(RoomEvent.Reconnected, () => (statusText.textContent = ''))
         .on(RoomEvent.Disconnected, () => {
@@ -184,7 +187,6 @@ import '../styles/cast.css';
           signingOut = false;
         });
 
-      enableAudio.onclick = () => room.startAudio();
 
       // The headset leaves the room; its tile disappears with the ParticipantDisconnected event.
       async function endCast(deviceId: string, name: string, button: HTMLButtonElement) {
@@ -206,7 +208,6 @@ import '../styles/cast.css';
           live.hidden = false;
           for (const p of room.remoteParticipants.values()) addTile(p);
           render();
-          enableAudio.hidden = room.canPlaybackAudio;
         },
         () => {
           signingOut = true;

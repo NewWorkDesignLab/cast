@@ -17,46 +17,25 @@ import '../styles/cast.css';
     <div id="content" hidden>
       <Header current="headsets" />
       <main class="page">
-        <section class="panel" aria-labelledby="add-title">
-          <h2 id="add-title">Add a headset</h2>
-          <form id="add-device">
-            <p class="muted">The headset gets a name with a random code, e.g. “Quest 3 - K7M2QX”.</p>
-            <button type="submit">Show pairing code</button>
-          </form>
-          <div id="pairing" hidden>
-            <div id="qr"></div>
-            <p>Open <strong>NWDL Cast</strong> in the headset and look at this code.<br />It works once and expires in 10 minutes.</p>
-          </div>
-          <p id="pairing-message" role="status"></p>
-        </section>
-
         <section class="panel" aria-labelledby="list-title">
-          <h2 id="list-title">Paired headsets</h2>
+          <h2 id="list-title">Headsets</h2>
           <ul id="device-list"></ul>
           <p id="list-message" class="muted" role="status"></p>
+          <p class="muted">Headsets are set up once with the setup script (app/setup.ps1).</p>
         </section>
       </main>
     </div>
 
     <script>
-      import { renderSVG } from 'uqr';
       import { setupSignIn, viewerFetch, type Session } from '../lib/session';
 
       type Device = { deviceId: string; name: string; createdAt: string; casting: boolean };
 
-      const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-      const content = byId('content');
-      const addForm = byId<HTMLFormElement>('add-device');
-      const pairing = byId('pairing');
-      const qr = byId('qr');
-      const pairingMessage = byId('pairing-message');
-      const list = byId('device-list');
-      const listMessage = byId('list-message');
-
+      const content = document.getElementById('content')!;
+      const list = document.getElementById('device-list')!;
+      const listMessage = document.getElementById('list-message')!;
       let session: Session | null = null;
       let poll = 0;
-      let pairingExpiry = 0;
-      let knownIds = new Set<string>();
 
       async function loadDevices() {
         if (!session) return;
@@ -66,20 +45,8 @@ import '../styles/cast.css';
           return;
         }
         const devices: Device[] = await res.json();
-        listMessage.textContent = devices.length ? '' : 'No headset is paired yet.';
+        listMessage.textContent = devices.length ? '' : 'No headset is set up yet.';
         list.replaceChildren(...devices.map(deviceItem));
-
-        // A new device while a code is shown: the headset has scanned it
-        const added = devices.find((d) => !knownIds.has(d.deviceId));
-        if (!pairing.hidden && added) {
-          pairing.hidden = true;
-          pairingMessage.textContent = `${added.name} is paired.`;
-        }
-        if (!pairing.hidden && Date.now() > pairingExpiry) {
-          pairing.hidden = true;
-          pairingMessage.textContent = 'The pairing code has expired.';
-        }
-        knownIds = new Set(devices.map((d) => d.deviceId));
       }
 
       function deviceItem(device: Device) {
@@ -89,60 +56,24 @@ import '../styles/cast.css';
         name.textContent = device.name;
         const state = document.createElement('span');
         state.className = device.casting ? 'state live' : 'state';
-        state.textContent = device.casting ? 'Casting' : `Paired ${new Date(device.createdAt).toLocaleDateString()}`;
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.textContent = 'Remove';
-        remove.onclick = () => removeDevice(device, remove);
-        item.append(name, state, remove);
+        state.textContent = device.casting ? 'Casting' : `Set up ${new Date(device.createdAt).toLocaleDateString()}`;
+        item.append(name, state);
         return item;
       }
-
-      async function removeDevice(device: Device, button: HTMLButtonElement) {
-        if (!session || !confirm(`Remove ${device.name}? It has to be paired again to cast.`)) return;
-        button.disabled = true;
-        const res = await viewerFetch(session, '/api/devices/remove', { deviceId: device.deviceId }).catch(() => null);
-        if (!res?.ok) {
-          button.disabled = false;
-          listMessage.textContent = `Could not remove ${device.name}.`;
-          return;
-        }
-        await loadDevices();
-      }
-
-      addForm.onsubmit = async (event) => {
-        event.preventDefault();
-        if (!session) return;
-        const button = addForm.querySelector('button')!;
-        button.disabled = true;
-        pairingMessage.textContent = '';
-        const res = await viewerFetch(session, '/api/devices/pairing', {}).catch(() => null);
-        button.disabled = false;
-        if (!res?.ok) {
-          pairingMessage.textContent = res?.status === 401 ? 'Your sign-in has expired. Reload the page.' : 'Could not create a pairing code.';
-          return;
-        }
-        const { qr: payload, expiresIn } = await res.json();
-        qr.innerHTML = renderSVG(payload, { border: 2 });
-        pairingExpiry = Date.now() + expiresIn * 1000;
-        pairing.hidden = false;
-      };
 
       setupSignIn(
         async (newSession) => {
           session = newSession;
           content.hidden = false;
           await loadDevices();
-          poll = window.setInterval(loadDevices, 3000);
+          poll = window.setInterval(loadDevices, 5000);
         },
         () => {
           session = null;
           content.hidden = true;
-          pairing.hidden = true;
           clearInterval(poll);
         },
       );
     </script>
-
   </body>
 </html>
