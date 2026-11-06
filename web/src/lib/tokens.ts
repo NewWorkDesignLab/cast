@@ -13,8 +13,8 @@ export function deviceToken(keys: Keys, deviceId: string): Promise<string> {
     room: ROOM,
     roomJoin: true,
     canPublish: true,
-    // screen_share_audio carries the app sound
-    canPublishSources: [TrackSource.CAMERA, TrackSource.MICROPHONE, TrackSource.SCREEN_SHARE_AUDIO],
+    // What the wearer sees as a screen share; app sound is mixed into the microphone track
+    canPublishSources: [TrackSource.MICROPHONE, TrackSource.SCREEN_SHARE],
     canSubscribe: false,
     canPublishData: false,
   });

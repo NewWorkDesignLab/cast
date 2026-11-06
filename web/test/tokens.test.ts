@@ -13,7 +13,7 @@ test('device token has exactly the device grants', async () => {
     room: 'cast',
     roomJoin: true,
     canPublish: true,
-    canPublishSources: ['camera', 'microphone', 'screen_share_audio'],
+    canPublishSources: ['microphone', 'screen_share'],
     canSubscribe: false,
     canPublishData: false,
   });

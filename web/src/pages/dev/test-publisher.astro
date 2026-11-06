@@ -1,5 +1,5 @@
 ---
-// Development only: stands in for the Unity app.
+// Development only: stands in for the headset app.
 export const prerender = false;
 if (import.meta.env.PROD) return new Response(null, { status: 404 });
 ---
@@ -13,8 +13,8 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
   <body>
     <h1>Test publisher</h1>
     <p>
-      Stands in for the Unity app: publishes a test pattern as <code>passthrough</code> and two beeps as
-      <code>mic</code> (low) and <code>app</code> (high). Keep this window visible, browsers slow down background tabs.
+      Stands in for the headset app: publishes a test pattern as a screen share and one microphone track with two beeps,
+      low for the microphone and high for the app sound. Keep this window visible, browsers slow down background tabs.
     </p>
     <form id="form">
       <label>Device ID <input id="device-id" value="test01" required /></label>
@@ -23,7 +23,7 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
       <button id="stop" type="button" disabled>Stop streaming</button>
     </form>
     <p id="status" role="status"></p>
-    <canvas id="canvas" width="1280" height="960"></canvas>
+    <canvas id="canvas" width="1280" height="720"></canvas>
 
     <script>
       import { Room, Track, VideoPreset } from 'livekit-client';
@@ -35,13 +35,13 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
       const statusText = byId('status');
       const canvas = byId<HTMLCanvasElement>('canvas');
 
-      // Same format as the Quest camera. Without an explicit encoding LiveKit picks a preset capped at 20-30 fps.
+      // Same format as the headset app. Without an explicit encoding LiveKit picks a preset capped at 20-30 fps.
       // Simulcast: the server gives each viewer the layer that fits its connection and tile size.
       const FPS = 60;
       const VIDEO = {
         simulcast: true,
         videoEncoding: { maxBitrate: 3_000_000, maxFramerate: FPS },
-        videoSimulcastLayers: [new VideoPreset(320, 240, 300_000, 30), new VideoPreset(640, 480, 1_200_000, 60)],
+        videoSimulcastLayers: [new VideoPreset(320, 180, 300_000, 30), new VideoPreset(640, 360, 1_200_000, 60)],
         degradationPreference: 'balanced' as const,
       };
 
@@ -59,35 +59,35 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
           ctx.fillStyle = '#fff';
           ctx.textAlign = 'center';
           ctx.font = 'bold 112px monospace';
-          ctx.fillText(`${now.toLocaleTimeString('en-GB')}.${String(now.getMilliseconds()).padStart(3, '0')}`, 640, 460);
+          ctx.fillText(`${now.toLocaleTimeString('en-GB')}.${String(now.getMilliseconds()).padStart(3, '0')}`, 640, 340);
           ctx.font = '64px monospace';
-          ctx.fillText(`#${frame}`, 640, 580);
+          ctx.fillText(`#${frame}`, 640, 460);
         }, 1000 / FPS);
 
+        // Both beeps in one track, as the headset app mixes the app sound into the microphone
         const audio = new AudioContext();
+        const destination = audio.createMediaStreamDestination();
         const tone = (frequency: number) => {
           const oscillator = audio.createOscillator();
           const gain = audio.createGain();
-          const destination = audio.createMediaStreamDestination();
           oscillator.frequency.value = frequency;
           gain.gain.value = 0;
           oscillator.connect(gain).connect(destination);
           oscillator.start();
-          return { gain: gain.gain, track: destination.stream.getAudioTracks()[0] };
+          return gain.gain;
         };
         const mic = tone(440);
         const app = tone(880);
         let tick = 0;
         const beep = setInterval(() => {
           tick++;
-          mic.gain.value = tick % 4 === 0 ? 0.2 : 0;
-          app.gain.value = tick % 4 === 2 ? 0.2 : 0;
+          mic.value = tick % 4 === 0 ? 0.2 : 0;
+          app.value = tick % 4 === 2 ? 0.2 : 0;
         }, 250);
 
         return {
           video: canvas.captureStream(FPS).getVideoTracks()[0],
-          mic: mic.track,
-          app: app.track,
+          audio: destination.stream.getAudioTracks()[0],
           stop: () => {
             clearInterval(draw);
             clearInterval(beep);
@@ -123,9 +123,8 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
           const media = startMedia();
           stopMedia = media.stop;
           const local = room.localParticipant;
-          await local.publishTrack(media.video, { name: 'passthrough', source: Track.Source.Camera, ...VIDEO });
-          await local.publishTrack(media.mic, { name: 'mic', source: Track.Source.Microphone });
-          await local.publishTrack(media.app, { name: 'app', source: Track.Source.ScreenShareAudio });
+          await local.publishTrack(media.video, { name: 'screen', source: Track.Source.ScreenShare, ...VIDEO });
+          await local.publishTrack(media.audio, { name: 'mic', source: Track.Source.Microphone });
           stopButton.disabled = false;
           statusText.textContent = `Streaming as device-${deviceId}`;
         } catch (err) {
