@@ -3,7 +3,9 @@ package org.nwdl.cast
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
@@ -56,6 +58,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun askForScreenCapture() {
-        consent.launch(getSystemService(MediaProjectionManager::class.java).createScreenCaptureIntent())
+        val manager = getSystemService(MediaProjectionManager::class.java)
+        // Always the whole view: the consent dialog then offers no choice of a single app
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+        } else {
+            manager.createScreenCaptureIntent()
+        }
+        consent.launch(intent)
     }
 }
