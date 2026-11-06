@@ -1,0 +1,28 @@
+{
+    "name": "NWDL.Cast.Passthrough.Editor",
+    "rootNamespace": "NWDL.Cast.EditorTools",
+    "references": [
+        "NWDL.Cast",
+        "NWDL.Cast.Passthrough",
+        "Oculus.VR.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "NWDL_CAST_MRUK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.meta.xr.mrutilitykit",
+            "expression": "81.0.0",
+            "define": "NWDL_CAST_MRUK"
+        }
+    ],
+    "noEngineReferences": false
+}

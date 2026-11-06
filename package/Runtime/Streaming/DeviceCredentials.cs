@@ -16,9 +16,14 @@ namespace NWDL.Cast
 
         public static string DefaultPath => Path.Combine(Application.persistentDataPath, "cast.json");
 
-        /// <summary>Loads the credentials. Logs why and returns false if they are missing or invalid; the app keeps running without streaming.</summary>
+        /// <summary>
+        /// Loads the credentials. Logs why and returns false if they are missing or invalid; the app keeps running without streaming.
+        /// </summary>
         public static bool TryLoad(out DeviceCredentials credentials) => TryLoad(DefaultPath, out credentials);
 
+        /// <summary>
+        /// Loads the credentials. Logs why and returns false if they are missing or invalid; the app keeps running without streaming.
+        /// </summary>
         public static bool TryLoad(string path, out DeviceCredentials credentials)
         {
             credentials = null;

@@ -2,8 +2,6 @@ using UnityEngine;
 
 namespace NWDL.Cast
 {
-    public enum CompositingMode { CameraOnly, VirtualOnly, Composite }
-
     public enum StreamCodec { VP8, H264 }
 
     /// <summary>Stream settings, shared by all headsets of an app. Device credentials are not stored here (see <see cref="DeviceCredentials"/>).</summary>
@@ -25,9 +23,7 @@ namespace NWDL.Cast
 
         public StreamCodec codec = StreamCodec.VP8;
 
-        public CompositingMode compositing = CompositingMode.Composite;
-
-        [Tooltip("Layers the spectator camera renders as virtual content.")]
-        public LayerMask spectatorCullingMask = ~0;
+        [Tooltip("With passthrough: layers drawn as virtual content over the camera image. Nothing = camera image only.")]
+        public LayerMask virtualContentLayers = ~0;
     }
 }

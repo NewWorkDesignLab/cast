@@ -2,25 +2,16 @@ using UnityEngine;
 
 namespace NWDL.Cast
 {
-    /// <summary>Delivers the camera image the stream is built from.</summary>
+    /// <summary>Camera image the passthrough stream is built from, with the pose and lens it was taken with.</summary>
     public interface IFrameSource
     {
-        /// <summary>Latest camera image, null until the source is ready.</summary>
+        /// <summary>Latest camera image, null until the source is ready. Pose and intrinsics are valid once this is set.</summary>
         Texture Texture { get; }
-    }
 
-    public static class FrameSource
-    {
-        /// <summary>Adds the frame source for this platform: a test source in the Editor, the passthrough camera on the headset.</summary>
-        public static IFrameSource AddTo(GameObject host)
-        {
-#if UNITY_EDITOR
-            return host.AddComponent<EditorTestFrameSource>();
-#else
-            // shortcut: no headset source yet, PassthroughFrameSource replaces this in phase 4
-            Debug.LogError("[Cast] No frame source for this platform yet.");
-            return null;
-#endif
-        }
+        /// <summary>World pose of the camera when the image was taken.</summary>
+        Pose Pose { get; }
+
+        /// <summary>Focal length (x, y) and principal point (z, w) as fractions of the image size; the principal point counts from the bottom left.</summary>
+        Vector4 NormalizedIntrinsics { get; }
     }
 }

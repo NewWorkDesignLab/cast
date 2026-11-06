@@ -2,8 +2,7 @@
     "name": "NWDL.Cast",
     "rootNamespace": "NWDL.Cast",
     "references": [
-        "LiveKit",
-        "meta.xr.mrutilitykit"
+        "LiveKit"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

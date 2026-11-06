@@ -41,7 +41,7 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
       const VIDEO = {
         simulcast: true,
         videoEncoding: { maxBitrate: 3_000_000, maxFramerate: FPS },
-        videoSimulcastLayers: [new VideoPreset(320, 240, 200_000, 15), new VideoPreset(640, 480, 800_000, 30)],
+        videoSimulcastLayers: [new VideoPreset(320, 240, 300_000, 30), new VideoPreset(640, 480, 1_200_000, 60)],
         degradationPreference: 'balanced' as const,
       };
 

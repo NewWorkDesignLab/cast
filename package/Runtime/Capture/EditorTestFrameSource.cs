@@ -2,7 +2,10 @@ using UnityEngine;
 
 namespace NWDL.Cast
 {
-    /// <summary>Frame source for the Editor: a test pattern, or the PC webcam (e.g. to test QR codes).</summary>
+    /// <summary>
+    /// Stands in for the headset camera in the Editor: a test pattern, or the PC webcam (e.g. to test QR codes),
+    /// seen from the main camera with its field of view.
+    /// </summary>
     public sealed class EditorTestFrameSource : MonoBehaviour, IFrameSource
     {
         [Tooltip("Use the PC webcam instead of the test pattern. Falls back to the pattern if there is no webcam.")]
@@ -13,6 +16,25 @@ namespace NWDL.Cast
         private WebCamTexture webcam;
 
         public Texture Texture { get; private set; }
+
+        public Pose Pose
+        {
+            get
+            {
+                var main = Camera.main;
+                return main != null ? new Pose(main.transform.position, main.transform.rotation) : Pose.identity;
+            }
+        }
+
+        public Vector4 NormalizedIntrinsics
+        {
+            get
+            {
+                var fov = Camera.main != null ? Camera.main.fieldOfView : 60f;
+                var fy = 0.5f / Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
+                return new Vector4(fy * resolution.y / resolution.x, fy, 0.5f, 0.5f);
+            }
+        }
 
         private void OnEnable()
         {

@@ -1,0 +1,25 @@
+{
+    "name": "NWDL.Cast.Passthrough",
+    "rootNamespace": "NWDL.Cast",
+    "references": [
+        "NWDL.Cast",
+        "meta.xr.mrutilitykit"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "NWDL_CAST_MRUK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.meta.xr.mrutilitykit",
+            "expression": "81.0.0",
+            "define": "NWDL_CAST_MRUK"
+        }
+    ],
+    "noEngineReferences": false
+}
