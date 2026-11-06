@@ -52,7 +52,8 @@ object CastSession {
     private lateinit var app: Context
     private var projectionData: Intent? = null
     private var room: Room? = null
-    private var screen: LocalScreencastVideoTrack? = null
+    private var screen: LocalScreencastVideoTrack? = null // standby capture, never published
+    private var relay: FrameRelay? = null // feeds the published track while casting
     private var appSound: ScreenAudioCapturer? = null
     private var roomEvents: Job? = null
     private var lastQrAction = 0L
@@ -117,7 +118,11 @@ object CastSession {
                 room.connect(url, token)
                 roomEvents = scope.launch { room.events.collect { if (it is RoomEvent.Disconnected) onDisconnected(it) } }
                 val local = room.localParticipant
-                local.publishVideoTrack(track, publishOptions)
+                val relay = FrameRelay().also { relay = it }
+                val published = local.createVideoTrack("screen", relay, captureOptions)
+                published.startCapture()
+                track.addRenderer(relay)
+                local.publishVideoTrack(published, publishOptions)
                 local.setMicrophoneEnabled(true)
                 // App sound goes into the microphone track; the viewer plays both together
                 val mic = local.getTrackPublication(Track.Source.MICROPHONE)?.track as? LocalAudioTrack
@@ -186,8 +191,9 @@ object CastSession {
         (local.getTrackPublication(Track.Source.MICROPHONE)?.track as? LocalAudioTrack)?.setAudioBufferCallback(null)
         appSound?.releaseAudioResources()
         appSound = null
-        screen?.let { if (local.getTrackPublication(Track.Source.SCREEN_SHARE) != null) local.unpublishTrack(it, stopOnUnpublish = false) }
-        room.disconnect()
+        relay?.let { screen?.removeRenderer(it) }
+        relay = null
+        room.disconnect() // stops and disposes the published tracks; the standby capture is not one of them
         if (screen != null) CastService.update(app, live = false)
     }
 
