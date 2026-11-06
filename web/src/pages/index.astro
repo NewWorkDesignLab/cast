@@ -1,0 +1,351 @@
+---
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>cast</title>
+  </head>
+  <body>
+    <form id="login">
+      <h1>cast</h1>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required autofocus />
+      <button type="submit">Sign in</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+
+    <main id="live" hidden>
+      <header>
+        <h1>cast</h1>
+        <span id="status" role="status"></span>
+        <button id="enable-audio" type="button" hidden>Click to enable audio</button>
+      </header>
+      <p id="empty">No headset is streaming right now.</p>
+      <div id="tiles"></div>
+    </main>
+
+    <template id="tile-template">
+      <article class="tile">
+        <video autoplay playsinline muted></video>
+        <footer>
+          <span class="name"></span>
+          <span class="quality"></span>
+          <span class="actions">
+            <button type="button" class="mute" aria-pressed="false">Mute</button>
+            <button type="button" class="fullscreen">Fullscreen</button>
+            <button type="button" class="focus" aria-pressed="false">Focus</button>
+          </span>
+        </footer>
+      </article>
+    </template>
+
+    <script>
+      import { Room, RoomEvent, Track, type RemoteParticipant } from 'livekit-client';
+
+      const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+      const loginForm = byId<HTMLFormElement>('login');
+      const passwordInput = byId<HTMLInputElement>('password');
+      const loginError = byId('login-error');
+      const live = byId('live');
+      const statusText = byId('status');
+      const enableAudio = byId<HTMLButtonElement>('enable-audio');
+      const empty = byId('empty');
+      const tilesEl = byId('tiles');
+      const template = byId<HTMLTemplateElement>('tile-template');
+
+      type Tile = {
+        el: HTMLElement;
+        participant: RemoteParticipant;
+        video: HTMLVideoElement;
+        quality: HTMLElement;
+        focus: HTMLButtonElement;
+        mute: HTMLButtonElement;
+        fullscreen: HTMLButtonElement;
+      };
+
+      const QUALITY: Record<string, string> = { excellent: 'Excellent', good: 'Good', poor: 'Poor', lost: 'Connection lost' };
+      const tiles = new Map<string, Tile>();
+      let manualFocus: string | null = null;
+      let muted = false;
+      let mutedFor: string | null = null; // the focus the mute applies to; a new focus starts unmuted
+
+      const room = new Room({ adaptiveStream: true, dynacast: true });
+
+      // A single tile is focused automatically.
+      function focused(): string | null {
+        if (manualFocus && tiles.has(manualFocus)) return manualFocus;
+        return tiles.size === 1 ? [...tiles.keys()][0] : null;
+      }
+
+      // Applies focus and audio rules: only the focused tile is visible large and audible.
+      function render() {
+        const focus = focused();
+        if (focus !== mutedFor) {
+          mutedFor = focus;
+          muted = false;
+        }
+        live.classList.toggle('has-focus', focus !== null);
+        empty.hidden = tiles.size > 0;
+        for (const [identity, tile] of tiles) {
+          const isFocus = identity === focus;
+          tile.el.classList.toggle('focused', isFocus);
+          tile.el.hidden = focus !== null && !isFocus;
+          tile.focus.hidden = tiles.size === 1;
+          tile.focus.textContent = isFocus ? 'Show all' : 'Focus';
+          tile.focus.setAttribute('aria-pressed', String(isFocus));
+          tile.mute.hidden = !isFocus;
+          tile.fullscreen.hidden = !isFocus;
+          tile.mute.textContent = muted ? 'Unmute' : 'Mute';
+          tile.mute.setAttribute('aria-pressed', String(muted));
+          for (const pub of tile.participant.audioTrackPublications.values()) pub.setSubscribed(isFocus && !muted);
+        }
+      }
+
+      function addTile(participant: RemoteParticipant) {
+        const identity = participant.identity;
+        if (!identity.startsWith('device-') || tiles.has(identity)) return;
+        const el = template.content.firstElementChild!.cloneNode(true) as HTMLElement;
+        const part = <T extends Element>(selector: string) => el.querySelector(selector) as T;
+        const tile: Tile = {
+          el,
+          participant,
+          video: part('video'),
+          quality: part('.quality'),
+          focus: part('.focus'),
+          mute: part('.mute'),
+          fullscreen: part('.fullscreen'),
+        };
+        part('.name').textContent = identity.slice('device-'.length);
+        tile.focus.onclick = () => {
+          manualFocus = focused() === identity ? null : identity;
+          render();
+        };
+        tile.mute.onclick = () => {
+          muted = !muted;
+          render();
+        };
+        tile.fullscreen.onclick = () => (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen());
+        tiles.set(identity, tile);
+        tilesEl.append(el);
+        for (const pub of participant.videoTrackPublications.values()) pub.setSubscribed(true);
+        showQuality(participant);
+      }
+
+      function removeTile(participant: RemoteParticipant) {
+        tiles.get(participant.identity)?.el.remove();
+        tiles.delete(participant.identity);
+        if (manualFocus === participant.identity) manualFocus = null;
+      }
+
+      function showQuality(participant: RemoteParticipant) {
+        const tile = tiles.get(participant.identity);
+        if (tile) tile.quality.textContent = QUALITY[participant.connectionQuality] ?? '';
+      }
+
+      room
+        .on(RoomEvent.ParticipantConnected, (p) => {
+          addTile(p);
+          render();
+        })
+        .on(RoomEvent.ParticipantDisconnected, (p) => {
+          removeTile(p);
+          render();
+        })
+        .on(RoomEvent.TrackPublished, (pub) => {
+          if (pub.kind === Track.Kind.Video) pub.setSubscribed(true);
+          else render();
+        })
+        .on(RoomEvent.TrackSubscribed, (track, pub, p) => {
+          const tile = tiles.get(p.identity);
+          if (!tile) return;
+          if (track.kind === Track.Kind.Video) return void track.attach(tile.video);
+          const audio = track.attach();
+          audio.dataset.sid = pub.trackSid;
+          tile.el.append(audio);
+        })
+        .on(RoomEvent.TrackUnsubscribed, (track, pub) => {
+          track.detach();
+          // livekit-client may already have detached the element, so find it by track id
+          document.querySelectorAll(`audio[data-sid="${pub.trackSid}"]`).forEach((e) => e.remove());
+        })
+        .on(RoomEvent.ConnectionQualityChanged, (_quality, p) => showQuality(p as RemoteParticipant))
+        .on(RoomEvent.AudioPlaybackStatusChanged, () => (enableAudio.hidden = room.canPlaybackAudio))
+        .on(RoomEvent.Reconnecting, () => (statusText.textContent = 'Reconnecting…'))
+        .on(RoomEvent.Reconnected, () => (statusText.textContent = ''))
+        .on(RoomEvent.Disconnected, () => {
+          for (const tile of tiles.values()) removeTile(tile.participant);
+          live.hidden = true;
+          loginForm.hidden = false;
+          loginError.textContent = 'The connection was closed. Please sign in again.';
+        });
+
+      enableAudio.onclick = () => room.startAudio();
+
+      async function signIn(password: string) {
+        const res = await fetch('/api/token/viewer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        }).catch(() => {
+          throw new Error('The server is not reachable. Check your connection.');
+        });
+        if (res.status === 401) throw new Error('Wrong password.');
+        if (!res.ok) throw new Error('Sign-in failed. Please try again.');
+        const { url, token } = await res.json();
+        await room.connect(url, token, { autoSubscribe: false }).catch(() => {
+          throw new Error('The streaming server is not reachable.');
+        });
+      }
+
+      loginForm.onsubmit = async (event) => {
+        event.preventDefault();
+        const button = loginForm.querySelector('button')!;
+        button.disabled = true;
+        loginError.textContent = '';
+        try {
+          await signIn(passwordInput.value);
+          passwordInput.value = '';
+          loginForm.hidden = true;
+          live.hidden = false;
+          for (const p of room.remoteParticipants.values()) addTile(p);
+          render();
+          enableAudio.hidden = room.canPlaybackAudio;
+        } catch (err) {
+          loginError.textContent = err instanceof Error ? err.message : String(err);
+        } finally {
+          button.disabled = false;
+        }
+      };
+    </script>
+
+    <style is:global>
+      :root {
+        color-scheme: dark;
+        --bg: #101214;
+        --surface: #1b1e22;
+        --border: #2c3137;
+        --fg: #e8eaed;
+        --muted: #9aa0a6;
+        --accent: #4f8cff;
+        --error: #ff6b6b;
+        font-family: system-ui, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.25rem;
+      }
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        padding: 0.45rem 0.8rem;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) {
+        border-color: var(--accent);
+      }
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      #login {
+        display: grid;
+        gap: 0.6rem;
+        width: min(320px, calc(100% - 32px));
+        margin: 20vh auto 0;
+      }
+      .error {
+        color: var(--error);
+        min-height: 1.5em;
+        margin: 0;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      #status {
+        color: var(--muted);
+      }
+      #enable-audio {
+        margin-left: auto;
+        border-color: var(--accent);
+      }
+      #empty {
+        color: var(--muted);
+        text-align: center;
+        margin-top: 20vh;
+      }
+      #tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
+        gap: 12px;
+        padding: 12px 16px;
+      }
+      .tile {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .tile video {
+        display: block;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: contain;
+        background: #000;
+      }
+      .has-focus #tiles {
+        grid-template-columns: 1fr;
+      }
+      .tile.focused video {
+        aspect-ratio: auto;
+        height: calc(100vh - 9rem);
+      }
+      .tile:fullscreen video {
+        height: calc(100vh - 3.5rem);
+      }
+      .tile footer {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 0.75rem;
+        padding: 0.5rem 0.75rem;
+      }
+      .name {
+        font-weight: 600;
+      }
+      .quality {
+        color: var(--muted);
+        font-size: 0.875rem;
+      }
+      .actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-left: auto;
+      }
+    </style>
+  </body>
+</html>

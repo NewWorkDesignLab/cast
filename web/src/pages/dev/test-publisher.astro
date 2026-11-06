@@ -1,0 +1,150 @@
+---
+// Development only: stands in for the Unity app.
+export const prerender = false;
+if (import.meta.env.PROD) return new Response(null, { status: 404 });
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cast test publisher</title>
+  </head>
+  <body>
+    <h1>Test publisher</h1>
+    <p>
+      Stands in for the Unity app: publishes a test pattern as <code>passthrough</code> and two beeps as
+      <code>mic</code> (low) and <code>app</code> (high). Keep this window visible, browsers slow down background tabs.
+    </p>
+    <form id="form">
+      <label>Device ID <input id="device-id" value="test01" required /></label>
+      <label>Device secret <input id="device-secret" type="password" required /></label>
+      <button id="start" type="submit">Start streaming</button>
+      <button id="stop" type="button" disabled>Stop streaming</button>
+    </form>
+    <p id="status" role="status"></p>
+    <canvas id="canvas" width="640" height="480"></canvas>
+
+    <script>
+      import { Room, Track } from 'livekit-client';
+
+      const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+      const form = byId<HTMLFormElement>('form');
+      const startButton = byId<HTMLButtonElement>('start');
+      const stopButton = byId<HTMLButtonElement>('stop');
+      const statusText = byId('status');
+      const canvas = byId<HTMLCanvasElement>('canvas');
+
+      let room: Room | null = null;
+      let stopMedia = () => {};
+
+      function startMedia() {
+        const ctx = canvas.getContext('2d')!;
+        let frame = 0;
+        const draw = setInterval(() => {
+          frame++;
+          const now = new Date();
+          ctx.fillStyle = `hsl(${frame % 360} 50% 25%)`;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = '#fff';
+          ctx.textAlign = 'center';
+          ctx.font = 'bold 56px monospace';
+          ctx.fillText(`${now.toLocaleTimeString('en-GB')}.${String(now.getMilliseconds()).padStart(3, '0')}`, 320, 230);
+          ctx.font = '32px monospace';
+          ctx.fillText(`#${frame}`, 320, 290);
+        }, 1000 / 30);
+
+        const audio = new AudioContext();
+        const tone = (frequency: number) => {
+          const oscillator = audio.createOscillator();
+          const gain = audio.createGain();
+          const destination = audio.createMediaStreamDestination();
+          oscillator.frequency.value = frequency;
+          gain.gain.value = 0;
+          oscillator.connect(gain).connect(destination);
+          oscillator.start();
+          return { gain: gain.gain, track: destination.stream.getAudioTracks()[0] };
+        };
+        const mic = tone(440);
+        const app = tone(880);
+        let tick = 0;
+        const beep = setInterval(() => {
+          tick++;
+          mic.gain.value = tick % 4 === 0 ? 0.2 : 0;
+          app.gain.value = tick % 4 === 2 ? 0.2 : 0;
+        }, 250);
+
+        return {
+          video: canvas.captureStream(30).getVideoTracks()[0],
+          mic: mic.track,
+          app: app.track,
+          stop: () => {
+            clearInterval(draw);
+            clearInterval(beep);
+            audio.close();
+          },
+        };
+      }
+
+      async function stopStreaming() {
+        await room?.disconnect();
+        room = null;
+        stopMedia();
+        stopMedia = () => {};
+        startButton.disabled = false;
+        stopButton.disabled = true;
+      }
+
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        startButton.disabled = true;
+        statusText.textContent = 'Starting…';
+        const deviceId = byId<HTMLInputElement>('device-id').value;
+        try {
+          const res = await fetch('/api/token/device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId, deviceSecret: byId<HTMLInputElement>('device-secret').value }),
+          });
+          if (!res.ok) throw new Error(`Token request failed (HTTP ${res.status})`);
+          const { url, token } = await res.json();
+          room = new Room();
+          await room.connect(url, token);
+          const media = startMedia();
+          stopMedia = media.stop;
+          const local = room.localParticipant;
+          await local.publishTrack(media.video, { name: 'passthrough', source: Track.Source.Camera, simulcast: false });
+          await local.publishTrack(media.mic, { name: 'mic', source: Track.Source.Microphone });
+          await local.publishTrack(media.app, { name: 'app', source: Track.Source.ScreenShareAudio });
+          stopButton.disabled = false;
+          statusText.textContent = `Streaming as device-${deviceId}`;
+        } catch (err) {
+          await stopStreaming();
+          statusText.textContent = err instanceof Error ? err.message : String(err);
+        }
+      };
+
+      stopButton.onclick = async () => {
+        await stopStreaming();
+        statusText.textContent = 'Stopped';
+      };
+    </script>
+
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 16px;
+      }
+      form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+      }
+      canvas {
+        max-width: 100%;
+        margin-top: 1rem;
+      }
+    </style>
+  </body>
+</html>

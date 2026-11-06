@@ -9,3 +9,4 @@ livekit.yaml
 CLAUDE.md
 docs/
 .vscode/
+server/bin/

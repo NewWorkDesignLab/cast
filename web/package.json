@@ -13,6 +13,7 @@
   "dependencies": {
     "@astrojs/vercel": "^11.0.20",
     "astro": "^7.4.7",
+    "livekit-client": "^2.23.0",
     "livekit-server-sdk": "^2.19.2"
   }
 }
