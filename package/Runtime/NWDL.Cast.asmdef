@@ -1,0 +1,17 @@
+{
+    "name": "NWDL.Cast",
+    "rootNamespace": "NWDL.Cast",
+    "references": [
+        "LiveKit",
+        "meta.xr.mrutilitykit"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
