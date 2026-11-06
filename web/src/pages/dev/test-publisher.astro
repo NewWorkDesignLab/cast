@@ -26,7 +26,7 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
     <canvas id="canvas" width="1280" height="720"></canvas>
 
     <script>
-      import { Room, Track, VideoPreset } from 'livekit-client';
+      import { Room, RoomEvent, Track, VideoPreset } from 'livekit-client';
 
       const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
       const form = byId<HTMLFormElement>('form');
@@ -97,8 +97,9 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
       }
 
       async function stopStreaming() {
-        await room?.disconnect();
-        room = null;
+        const current = room;
+        room = null; // marks the disconnect below as our own
+        await current?.disconnect();
         stopMedia();
         stopMedia = () => {};
         startButton.disabled = false;
@@ -119,6 +120,11 @@ if (import.meta.env.PROD) return new Response(null, { status: 404 });
           if (!res.ok) throw new Error(`Token request failed (HTTP ${res.status})`);
           const { url, token } = await res.json();
           room = new Room({ dynacast: true }); // pause layers no viewer needs
+          room.on(RoomEvent.Disconnected, async () => {
+            if (!room) return;
+            await stopStreaming();
+            statusText.textContent = 'Cast ended from the website';
+          });
           await room.connect(url, token);
           const media = startMedia();
           stopMedia = media.stop;

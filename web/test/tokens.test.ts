@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TokenVerifier } from 'livekit-server-sdk';
-import { deviceToken, viewerToken } from '../src/lib/tokens.ts';
+import { deviceToken, isViewerToken, viewerToken } from '../src/lib/tokens.ts';
 
 const keys = { apiKey: 'devkey', apiSecret: 'secret' };
 const decode = (jwt: string) => new TokenVerifier(keys.apiKey, keys.apiSecret).verify(jwt);
@@ -31,4 +31,11 @@ test('viewer token has exactly the viewer grants', async () => {
     canPublishData: false,
   });
   assert.equal(Number(claims.exp) - Number(claims.nbf), 3600);
+});
+
+test('only valid viewer tokens may end a cast', async () => {
+  assert.equal(await isViewerToken(keys, await viewerToken(keys)), true);
+  assert.equal(await isViewerToken(keys, await deviceToken(keys, 'quest01')), false);
+  assert.equal(await isViewerToken({ ...keys, apiSecret: 'other' }, await viewerToken(keys)), false);
+  assert.equal(await isViewerToken(keys, 'not-a-jwt'), false);
 });

@@ -5,6 +5,9 @@ import android.content.Intent
 import io.livekit.android.LiveKit
 import io.livekit.android.RoomOptions
 import io.livekit.android.audio.ScreenAudioCapturer
+import io.livekit.android.events.DisconnectReason
+import io.livekit.android.events.RoomEvent
+import io.livekit.android.events.collect
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.VideoTrackPublishDefaults
 import io.livekit.android.room.track.CustomVideoPreset
@@ -18,6 +21,7 @@ import io.livekit.android.room.track.VideoEncoding
 import io.livekit.android.room.track.screencapture.ScreenCaptureParams
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +34,7 @@ object CastSession {
         data object Idle : State
         data object Starting : State
         data object Casting : State
+        data class Ended(val reason: String) : State
         data class Failed(val reason: String) : State
     }
 
@@ -41,6 +46,7 @@ object CastSession {
     val state: StateFlow<State> = _state
 
     private var room: Room? = null
+    private var roomEvents: Job? = null
 
     // Three layers so that the server can give each viewer what its connection and tile size allow.
     private val roomOptions = RoomOptions(
@@ -72,6 +78,7 @@ object CastSession {
                 CastService.start(appContext)
                 val room = LiveKit.create(appContext, roomOptions).also { room = it }
                 room.connect(url, token)
+                roomEvents = scope.launch { room.events.collect { if (it is RoomEvent.Disconnected) onDisconnected(appContext, it) } }
                 val local = room.localParticipant
                 local.setScreenShareEnabled(true, ScreenCaptureParams(projectionData, onStop = { stop(appContext) }))
                 local.setMicrophoneEnabled(true)
@@ -89,6 +96,14 @@ object CastSession {
         _state.value = State.Idle
     }
 
+    // A viewer ended the cast (the server removed this device), or the connection could not be restored.
+    private fun onDisconnected(context: Context, event: RoomEvent.Disconnected) {
+        release(context)
+        _state.value = State.Ended(
+            if (event.reason == DisconnectReason.PARTICIPANT_REMOVED) "Cast ended from the website." else "Connection lost.",
+        )
+    }
+
     // App sound goes into the microphone track; the viewer plays both together.
     private fun mixAppSound(room: Room) {
         val local = room.localParticipant
@@ -100,6 +115,8 @@ object CastSession {
     }
 
     private fun release(context: Context) {
+        roomEvents?.cancel() // our own disconnect below is not an "ended" event
+        roomEvents = null
         room?.let {
             (it.localParticipant.getTrackPublication(Track.Source.MICROPHONE)?.track as? LocalAudioTrack)?.setAudioBufferCallback(null)
             it.disconnect()

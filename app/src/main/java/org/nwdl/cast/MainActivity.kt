@@ -49,9 +49,10 @@ class MainActivity : ComponentActivity() {
                     )
                     CastSession.State.Starting -> "Starting…"
                     CastSession.State.Casting -> "Casting. You can switch to another app now."
+                    is CastSession.State.Ended -> state.reason
                     is CastSession.State.Failed -> "Casting failed: ${state.reason}"
                 }
-                start.isEnabled = state == CastSession.State.Idle || state is CastSession.State.Failed
+                start.isEnabled = state != CastSession.State.Starting && state != CastSession.State.Casting
                 stop.isEnabled = state == CastSession.State.Casting
             }
         }

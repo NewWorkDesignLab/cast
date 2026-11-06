@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { AccessToken, TrackSource } from 'livekit-server-sdk';
+import { AccessToken, RoomServiceClient, TokenVerifier, TrackSource } from 'livekit-server-sdk';
 
 // One room for everything; the token decides what a participant may do in it.
 export const ROOM = 'cast';
@@ -19,6 +19,27 @@ export function deviceToken(keys: Keys, deviceId: string): Promise<string> {
     canPublishData: false,
   });
   return token.toJwt();
+}
+
+/** True for a valid, unexpired viewer token of our room. */
+export async function isViewerToken(keys: Keys, jwt: string): Promise<boolean> {
+  try {
+    const claims = await new TokenVerifier(keys.apiKey, keys.apiSecret).verify(jwt);
+    return String(claims.sub).startsWith('viewer-') && claims.video?.room === ROOM;
+  } catch {
+    return false;
+  }
+}
+
+/** Ends a device's cast by removing it from the room. False if the device is not in the room. */
+export async function removeDevice(keys: Keys, livekitUrl: string, deviceId: string): Promise<boolean> {
+  const api = new RoomServiceClient(livekitUrl.replace(/^ws/, 'http'), keys.apiKey, keys.apiSecret);
+  try {
+    await api.removeParticipant(ROOM, `device-${deviceId}`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function viewerToken(keys: Keys): Promise<string> {
