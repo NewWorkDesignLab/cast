@@ -16,6 +16,11 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask">
+            <!-- Landscape panel: LiveKit takes the capture orientation from this window -->
+            <layout
+                android:defaultWidth="800dp"
+                android:defaultHeight="500dp"
+                android:gravity="center" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
